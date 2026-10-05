@@ -17,7 +17,7 @@ class DesktopAppPushTest extends TestCase
 
     private const ANDROID_CHROME = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Mobile Safari/537.36';
 
-    private const DESKTOP_APP = 'GoydaCord/1.0.96 (win32) Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Electron/37.10.3 Safari/537.36';
+    private const DESKTOP_APP = 'SonetCord/1.0.96 (win32) Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Electron/37.10.3 Safari/537.36';
 
     public function test_desktop_browser_push_is_skipped_while_the_desktop_app_runs_but_phones_still_get_it(): void
     {

@@ -189,7 +189,7 @@ class DemoGuestService
     /** Домен .invalid зарезервирован (RFC 2606): письмо на такой адрес не уйдёт никуда. */
     private function personaEmail(string $key): string
     {
-        return "demo-{$key}@goidacord.invalid";
+        return "demo-{$key}@sonetcord.invalid";
     }
 
     /**
@@ -222,7 +222,7 @@ class DemoGuestService
         $guest = new User([
             'name' => 'Гость '.random_int(1000, 9999),
             'login' => $login,
-            'email' => $login.'@demo.goidacord.invalid',
+            'email' => $login.'@demo.sonetcord.invalid',
             'password' => Str::random(40),
             'date' => now(),
             'last_online' => now(),

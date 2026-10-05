@@ -32,7 +32,7 @@ class SessionControllerTest extends TestCase
             'ip_address' => '8.8.8.8',
             'country' => 'Россия (RU)',
             'city' => 'Москва',
-            'user_agent' => 'GoydaCord/1.0.60 (Windows) Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/138.0.0.0 Electron/37.0.0 Safari/537.36',
+            'user_agent' => 'SonetCord/1.0.60 (Windows) Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/138.0.0.0 Electron/37.0.0 Safari/537.36',
         ])->save();
 
         $this->withToken($current->plainTextToken)
@@ -40,7 +40,7 @@ class SessionControllerTest extends TestCase
             ->assertOk()
             ->assertJsonFragment([
                 'country' => 'Россия (RU)',
-                'device' => 'GoydaCord 1.0.60 · Windows',
+                'device' => 'SonetCord 1.0.60 · Windows',
                 'os' => 'Windows',
                 'device_type' => 'desktop',
             ]);

@@ -6,7 +6,7 @@ return [
 
     'allowed_methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 
-    'allowed_origins' => explode(',', env('CORS_ALLOWED_ORIGINS', 'https://goidacord.ru,https://www.goidacord.ru,http://localhost:3000')),
+    'allowed_origins' => explode(',', env('CORS_ALLOWED_ORIGINS', 'https://sonetcord.ru,https://www.sonetcord.ru,http://localhost:3000')),
 
     'allowed_origins_patterns' => [],
 

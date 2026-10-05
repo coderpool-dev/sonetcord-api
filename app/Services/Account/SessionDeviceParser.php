@@ -34,7 +34,7 @@ class SessionDeviceParser
 
     /**
      * Грубая классификация клиента для статистики «веб / ПК-приложение / телефон».
-     * desktop = наш Electron-клиент (GoydaCord/…); mobile = телефон/планшет; web = браузер.
+     * desktop = наш Electron-клиент (SonetCord/…); mobile = телефон/планшет; web = браузер.
      */
     public function platformKind(?string $userAgent): string
     {
@@ -43,7 +43,7 @@ class SessionDeviceParser
             return 'web';
         }
 
-        if (stripos($userAgent, 'GoydaCord') !== false || stripos($userAgent, 'Electron/') !== false) {
+        if (stripos($userAgent, 'SonetCord') !== false || stripos($userAgent, 'Electron/') !== false) {
             return 'desktop';
         }
 
@@ -83,11 +83,11 @@ class SessionDeviceParser
 
     private function detectClient(string $userAgent): ?string
     {
-        if (preg_match('/GoydaCord\/([\d.]+)/i', $userAgent, $matches)) {
-            return 'GoydaCord '.$matches[1];
+        if (preg_match('/SonetCord\/([\d.]+)/i', $userAgent, $matches)) {
+            return 'SonetCord '.$matches[1];
         }
-        if (stripos($userAgent, 'GoydaCord') !== false || stripos($userAgent, 'Electron/') !== false) {
-            return 'GoydaCord';
+        if (stripos($userAgent, 'SonetCord') !== false || stripos($userAgent, 'Electron/') !== false) {
+            return 'SonetCord';
         }
         if (preg_match('/Edg\/(\d+)/', $userAgent, $matches)) {
             return 'Edge '.$matches[1];

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Бэкап БД Zovcord: mysqldump -> gzip -> (опц. gpg) -> Яндекс.Диск -> письмо-отчёт.
+# Бэкап БД SonetCord: mysqldump -> gzip -> (опц. gpg) -> Яндекс.Диск -> письмо-отчёт.
 # Запускать из cron под root. Конфиг: /etc/zovcord-backup.conf (chmod 600).
 #
 set -Eeuo pipefail
@@ -87,14 +87,14 @@ on_error() {
   local code=$? line=$1
   log "ПРОВАЛ на строке $line (код $code)"
   {
-    printf 'Бэкап Zovcord ПРОВАЛЕН.\n\n'
+    printf 'Бэкап SonetCord ПРОВАЛЕН.\n\n'
     printf 'Сервер : %s\n' "$HOST"
     printf 'Время  : %s\n' "$(date '+%F %T %Z')"
     printf 'Строка : %s (код выхода %s)\n\n' "$line" "$code"
     printf -- '--- последние 60 строк лога ---\n'
     tail -n 60 "$RUN_LOG"
   } > "$WORK/body.txt"
-  send_mail "❌ Бэкап Zovcord ПРОВАЛЕН ($HOST)" "$WORK/body.txt"
+  send_mail "❌ Бэкап SonetCord ПРОВАЛЕН ($HOST)" "$WORK/body.txt"
   cleanup
   exit "$code"
 }
@@ -287,7 +287,7 @@ COUNT="$(yd "$API/resources?path=$(urlenc "$YADISK_DIR")&limit=1000&fields=_embe
 ELAPSED=$((SECONDS - START_TS))
 
 {
-  printf 'Бэкап Zovcord выполнен успешно.\n\n'
+  printf 'Бэкап SonetCord выполнен успешно.\n\n'
   printf 'Сервер      : %s\n' "$HOST"
   printf 'Время       : %s (заняло %s c)\n' "$(date '+%F %T %Z')" "$ELAPSED"
   printf 'База        : %s (%s таблиц)\n' "$DB_NAME" "$TABLES"
@@ -307,7 +307,7 @@ ELAPSED=$((SECONDS - START_TS))
 log "=== Готово за ${ELAPSED}s ==="
 
 if [ "$MAIL_ON_SUCCESS" = "1" ]; then
-  send_mail "✅ Бэкап Zovcord ($HOST, $STAMP)" "$WORK/body.txt"
+  send_mail "✅ Бэкап SonetCord ($HOST, $STAMP)" "$WORK/body.txt"
 fi
 if [ -n "$HEALTHCHECK_URL" ]; then
   curl -fsS -m 20 "$HEALTHCHECK_URL" -o /dev/null || true

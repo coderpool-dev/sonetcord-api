@@ -145,8 +145,8 @@ class YandexMusicApiClient
         return Http::timeout(8)->withHeaders([
             'Authorization' => 'OAuth '.$accessToken,
             'Accept' => 'application/json',
-            'X-Yandex-Music-Client' => 'GoydaCord/1.0',
-            'X-Yandex-Music-Device' => 'os=Windows; os_version=10; manufacturer=GoydaCord; model=Desktop; clid=; device_id=goydacord; uuid=goydacord',
+            'X-Yandex-Music-Client' => 'SonetCord/1.0',
+            'X-Yandex-Music-Device' => 'os=Windows; os_version=10; manufacturer=SonetCord; model=Desktop; clid=; device_id=goydacord; uuid=goydacord',
         ]);
     }
 }

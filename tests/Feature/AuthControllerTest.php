@@ -159,7 +159,7 @@ class AuthControllerTest extends TestCase
     public function test_forgot_password_sends_reset_link_when_user_exists(): void
     {
         Notification::fake();
-        config(['app.frontend_url' => 'https://goidacord.ru']);
+        config(['app.frontend_url' => 'https://sonetcord.ru']);
 
         $user = User::factory()->create(['email' => 'forgot@example.test']);
 
@@ -171,7 +171,7 @@ class AuthControllerTest extends TestCase
             $mail = $notification->toMail($user);
             $actionUrl = $mail->actionUrl;
 
-            return str_starts_with($actionUrl, 'https://goidacord.ru/reset-password?')
+            return str_starts_with($actionUrl, 'https://sonetcord.ru/reset-password?')
                 && str_contains($actionUrl, 'email=forgot%40example.test')
                 && str_contains($actionUrl, 'token=');
         });

@@ -177,7 +177,7 @@ class SupportThreadService
 
         $preview = mb_strimwidth(trim($message->body), 0, 140, '…');
         $this->push->sendToUsers([$userId], [
-            'title' => 'Поддержка GoydaCord',
+            'title' => 'Поддержка SonetCord',
             'body' => $preview !== '' ? $preview : 'Прислали изображение',
             'url' => '/support',
             'tag' => 'support',

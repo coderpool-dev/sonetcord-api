@@ -113,7 +113,7 @@ class LinkPreviewService
                 $response = Http::timeout(6)
                     ->withOptions(['allow_redirects' => false])
                     ->withHeaders([
-                        'User-Agent' => 'GoydaCord-LinkPreview/1.0',
+                        'User-Agent' => 'SonetCord-LinkPreview/1.0',
                         'Accept' => 'text/html,application/xhtml+xml',
                     ])
                     ->get($current);
@@ -260,10 +260,10 @@ class LinkPreviewService
 
         return [
             'url' => $url,
-            'title' => $login.' приглашает вас в GoydaCord',
+            'title' => $login.' приглашает вас в SonetCord',
             'description' => 'Откройте ссылку, зарегистрируйтесь — и заявка в друзья уйдёт сама.',
             'image' => $siteUrl.'/i/'.$encoded.'/opengraph-image',
-            'site_name' => 'GoydaCord',
+            'site_name' => 'SonetCord',
         ];
     }
 }

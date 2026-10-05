@@ -20,9 +20,9 @@ class EmailVerificationLinkNotification extends Notification
     public function toMail(object $notifiable): MailMessage
     {
         return (new MailMessage)
-            ->subject('Подтверждение почты GoydaCord')
+            ->subject('Подтверждение почты SonetCord')
             ->greeting('Привет!')
-            ->line('Подтвердите почту, чтобы пользоваться GoydaCord.')
+            ->line('Подтвердите почту, чтобы пользоваться SonetCord.')
             ->action('Подтвердить почту', $this->verificationUrl)
             ->line('Ссылка действует 60 минут. Если вы не создавали аккаунт, просто проигнорируйте это письмо.');
     }

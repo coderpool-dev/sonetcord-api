@@ -20,7 +20,7 @@ class EnsureEmailIsVerifiedForApi
             return response()->json([
                 'status' => 'error',
                 'code' => 'EMAIL_NOT_VERIFIED',
-                'message' => 'Подтвердите почту, чтобы пользоваться GoydaCord',
+                'message' => 'Подтвердите почту, чтобы пользоваться SonetCord',
             ], 403);
         }
 

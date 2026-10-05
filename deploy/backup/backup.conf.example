@@ -1,4 +1,4 @@
-# Конфиг бэкапа Zovcord. На сервере: /etc/zovcord-backup.conf, chmod 600, root:root.
+# Конфиг бэкапа SonetCord. На сервере: /etc/zovcord-backup.conf, chmod 600, root:root.
 # В git НЕ коммитить — здесь секреты.
 
 # --- Приложение --------------------------------------------------------------

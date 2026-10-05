@@ -10,13 +10,13 @@ class WelcomePageTest extends TestCase
     {
         $this->get('/')
             ->assertOk()
-            ->assertSee('https://goidacord.ru/downloads/windows', false);
+            ->assertSee('https://sonetcord.ru/downloads/windows', false);
     }
 
     public function test_old_installer_link_redirects_to_current_version(): void
     {
         $this->get('/downloads/GoydaCord-Setup-1.0.0.exe')
             ->assertStatus(301)
-            ->assertRedirect('https://goidacord.ru/downloads/windows');
+            ->assertRedirect('https://sonetcord.ru/downloads/windows');
     }
 }

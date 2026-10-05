@@ -208,7 +208,7 @@ class YandexYnisonService
                 ],
                 'device' => [
                     'capabilities' => ['can_be_player' => false, 'can_be_remote_controller' => true, 'volume_granularity' => 0],
-                    'info' => ['device_id' => $deviceId, 'type' => 'WEB', 'title' => 'GoydaCord', 'app_name' => 'Chrome'],
+                    'info' => ['device_id' => $deviceId, 'type' => 'WEB', 'title' => 'SonetCord', 'app_name' => 'Chrome'],
                     'volume_info' => ['volume' => 0],
                 ],
                 'is_currently_active' => false,

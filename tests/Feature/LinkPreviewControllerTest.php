@@ -49,11 +49,11 @@ class LinkPreviewControllerTest extends TestCase
 
         Http::fake();
 
-        $response = $this->getJson('/api/link-preview?url=https://goidacord.ru/i/EgoOne')->assertOk();
+        $response = $this->getJson('/api/link-preview?url=https://sonetcord.ru/i/EgoOne')->assertOk();
 
-        $response->assertJsonPath('title', 'EgoOne приглашает вас в GoydaCord');
-        $response->assertJsonPath('site_name', 'GoydaCord');
-        $response->assertJsonPath('image', 'https://goidacord.ru/i/EgoOne/opengraph-image');
+        $response->assertJsonPath('title', 'EgoOne приглашает вас в SonetCord');
+        $response->assertJsonPath('site_name', 'SonetCord');
+        $response->assertJsonPath('image', 'https://sonetcord.ru/i/EgoOne/opengraph-image');
         Http::assertNothingSent();
     }
 

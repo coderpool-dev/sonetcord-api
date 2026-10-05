@@ -36,7 +36,7 @@ class YandexMusicConnectionService
         $response = Http::asForm()->post(self::OAUTH_BASE_URL.'/device/code', [
             'client_id' => $this->clientId(),
             'device_id' => Str::lower(Str::random(10)),
-            'device_name' => 'GoydaCord',
+            'device_name' => 'SonetCord',
         ]);
 
         if (! $response->successful()) {

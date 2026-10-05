@@ -59,7 +59,7 @@ return [
     'webpush' => [
         'public_key' => env('VAPID_PUBLIC_KEY'),
         'private_key' => env('VAPID_PRIVATE_KEY'),
-        'subject' => env('VAPID_SUBJECT', 'https://goidacord.ru'),
+        'subject' => env('VAPID_SUBJECT', 'https://sonetcord.ru'),
     ],
 
     // Голосовые каналы серверов через LiveKit (SFU). Пусто — клиенты работают по-старому, P2P.

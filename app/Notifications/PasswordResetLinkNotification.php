@@ -20,9 +20,9 @@ class PasswordResetLinkNotification extends Notification
     public function toMail(object $notifiable): MailMessage
     {
         return (new MailMessage)
-            ->subject('Восстановление пароля GoydaCord')
+            ->subject('Восстановление пароля SonetCord')
             ->greeting('Привет!')
-            ->line('Мы получили запрос на восстановление пароля для вашего аккаунта GoydaCord.')
+            ->line('Мы получили запрос на восстановление пароля для вашего аккаунта SonetCord.')
             ->action('Восстановить пароль', $this->resetUrl)
             ->line('Ссылка действует 60 минут. Если вы не запрашивали восстановление, просто проигнорируйте это письмо.');
     }

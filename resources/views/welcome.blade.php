@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>GoidaCord API</title>
+    <title>SonetCord API</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -353,7 +353,7 @@
 <body>
 
 <header>
-    <div class="logo">Goida<span>Cord</span></div>
+    <div class="logo">Sonet<span>Cord</span></div>
     <div class="header-right">
         <span class="status">Работает</span>
         <span class="version">API / v1</span>
@@ -365,7 +365,7 @@
 
         <span class="eyebrow">REST API</span>
 
-        <h1>Серверная часть<br><em>GoidaCord</em></h1>
+        <h1>Серверная часть<br><em>SonetCord</em></h1>
 
         <p class="description">
             Этот сервер обрабатывает все запросы от клиентского приложения — авторизацию,
@@ -374,22 +374,22 @@
         </p>
 
         <div class="actions">
-            <a href="https://goidacord.ru" class="btn-main">
+            <a href="https://sonetcord.ru" class="btn-main">
                 <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
                     <path d="M3 7.5h9M8.5 4l3.5 3.5L8.5 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
-                Открыть GoidaCord
+                Открыть SonetCord
             </a>
-            <a href="https://goidacord.ru" class="link-secondary">goidacord.ru →</a>
+            <a href="https://sonetcord.ru" class="link-secondary">sonetcord.ru →</a>
         </div>
 
         <div class="desktop-card">
             <img class="desktop-icon" src="/images/goydacord-app-icon.png" alt="">
             <div>
-                <h2>GoydaCord for Windows</h2>
+                <h2>SonetCord for Windows</h2>
                 <p>Desktop window, tray mode, autostart and quick access to calls without keeping a browser tab open.</p>
             </div>
-            <a class="btn-download" href="https://goidacord.ru/downloads/windows">Download .exe</a>
+            <a class="btn-download" href="https://sonetcord.ru/downloads/windows">Download .exe</a>
         </div>
 
         <div class="table-wrap">
@@ -444,8 +444,8 @@
 </main>
 
 <footer>
-    <span>© 2025 GoidaCord</span>
-    <a href="https://goidacord.ru">goidacord.ru</a>
+    <span>© 2025 SonetCord</span>
+    <a href="https://sonetcord.ru">sonetcord.ru</a>
 </footer>
 
 </body>

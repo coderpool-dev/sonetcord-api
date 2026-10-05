@@ -54,7 +54,7 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
-    'frontend_url' => env('FRONTEND_URL', 'https://goidacord.ru'),
+    'frontend_url' => env('FRONTEND_URL', 'https://sonetcord.ru'),
 
     // Кому команда admin:seed выдаёт права, если логин не передан аргументом.
     'admin_seed_login' => env('ADMIN_SEED_LOGIN'),

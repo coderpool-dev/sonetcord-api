@@ -2,7 +2,7 @@
     "$schema": "https://getcomposer.org/schema.json",
     "name": "goydacord/api",
     "type": "project",
-    "description": "API голосового мессенджера GoydaCord",
+    "description": "API голосового мессенджера SonetCord",
     "keywords": ["laravel", "webrtc", "messenger"],
     "license": "MIT",
     "require": {

@@ -17,13 +17,13 @@ class SessionDeviceParserTest extends TestCase
 
     public function test_detects_goydacord_desktop(): void
     {
-        $userAgent = 'GoydaCord/1.0.60 (Windows) Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/138.0.0.0 Electron/37.0.0 Safari/537.36';
+        $userAgent = 'SonetCord/1.0.60 (Windows) Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/138.0.0.0 Electron/37.0.0 Safari/537.36';
         $device = $this->parser->describe($userAgent);
 
-        $this->assertSame('GoydaCord 1.0.60 · Windows', $device['device']);
+        $this->assertSame('SonetCord 1.0.60 · Windows', $device['device']);
         $this->assertSame('desktop', $device['device_type']);
         $this->assertSame('Windows', $device['os']);
-        $this->assertSame('GoydaCord 1.0.60', $device['client']);
+        $this->assertSame('SonetCord 1.0.60', $device['client']);
     }
 
     public function test_detects_electron_before_chrome(): void
@@ -31,8 +31,8 @@ class SessionDeviceParserTest extends TestCase
         $userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.251 Electron/37.2.6 Safari/537.36';
         $device = $this->parser->describe($userAgent);
 
-        $this->assertSame('GoydaCord · Windows', $device['device']);
-        $this->assertSame('GoydaCord', $device['client']);
+        $this->assertSame('SonetCord · Windows', $device['device']);
+        $this->assertSame('SonetCord', $device['client']);
     }
 
     public function test_detects_iphone_safari(): void
