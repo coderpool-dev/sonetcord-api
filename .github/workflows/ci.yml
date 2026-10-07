@@ -50,7 +50,21 @@ jobs:
           extensions: mbstring, pdo_sqlite, pdo_mysql, gd, curl, openssl, sodium
           coverage: none
       - run: composer install --no-interaction --prefer-dist --no-progress
-      - run: php vendor/bin/phpunit --do-not-cache-result
+      - name: PHPUnit
+        shell: bash
+        run: |
+          set +e
+          php vendor/bin/phpunit --do-not-cache-result --stop-on-error > phpunit-output.log 2>&1
+          result=$?
+          cat phpunit-output.log
+          if [ "$result" -ne 0 ]; then
+            python3 - <<'PY'
+          from pathlib import Path
+          text = Path('phpunit-output.log').read_text(errors='replace')[-16000:]
+          print('::error title=PHPUnit failure::' + text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
+          PY
+          fi
+          exit "$result"
       - if: matrix.database == 'sqlite'
         run: composer analyse
       - if: matrix.database == 'sqlite'
