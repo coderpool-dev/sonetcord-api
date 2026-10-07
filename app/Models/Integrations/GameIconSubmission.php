@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class GameIconSubmission extends Model
 {
+    protected $table = 'game_icon_submissions';
+
     protected $fillable = [
         'slug', 'name', 'file', 'icon_hash', 'source', 'status', 'pending_key',
         'uploaded_by', 'reviewed_by', 'reviewed_at',

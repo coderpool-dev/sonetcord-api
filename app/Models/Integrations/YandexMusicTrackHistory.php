@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class YandexMusicTrackHistory extends Model
 {
+    protected $table = 'yandex_music_track_histories';
+
     protected $fillable = [
         'user_id',
         'track_key',

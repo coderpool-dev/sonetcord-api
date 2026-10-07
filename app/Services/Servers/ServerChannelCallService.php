@@ -32,7 +32,7 @@ class ServerChannelCallService
         private readonly CallPresenceService $presence,
         private readonly CallScreenPreviewService $screenPreviews,
         private readonly ServerRoleService $roles,
-        private readonly ServerChannelPermissionResolver $resolver,
+        private readonly ServerChannelAccess $access,
     ) {}
 
     public function join(User $user, ServerChannel $channel, ?string $sessionId): array
@@ -126,7 +126,7 @@ class ServerChannelCallService
         }
 
         // Ограничения голоса и в пинге: если событие ServerVoiceModerated потерялось (переподключение
-        // сокета), клиент всё равно применит мьют модератора/отсутствие права «Говорить» за ≤10 с.
+        // сокета), клиент всё равно применит мьют модератора/отсутствие права «Говорить» за ≤15 с.
         return [
             ...$this->presence->heartbeatServerChannel($user, (int) $channel->id, $sessionId, $screenSharing),
             ...$this->voiceRestrictions($user, $channel),
@@ -140,19 +140,13 @@ class ServerChannelCallService
      */
     public function voiceRestrictions(User $user, ServerChannel $channel): array
     {
-        $isOwner = (int) Server::query()->whereKey($channel->server_id)->value('owner_id') === (int) $user->id;
-        $member = ServerMember::query()
-            ->where('server_id', $channel->server_id)
-            ->where('user_id', $user->id)
-            ->active()
-            ->with('roles')
-            ->first();
+        // Те же права, что проверила ServerChannelPolicy::call в этом запросе (запомнены в ServerChannelAccess).
+        $access = $this->access->for($user, $channel);
 
         return [
-            'can_speak' => $isOwner || ($member !== null
-                && ServerPermission::has($this->resolver->effectivePermissions($member, $channel), ServerPermission::SPEAK)),
-            'voice_muted' => (bool) $member?->voice_muted,
-            'voice_deafened' => (bool) $member?->voice_deafened,
+            'can_speak' => $access->allows(ServerPermission::SPEAK),
+            'voice_muted' => (bool) $access->member?->voice_muted,
+            'voice_deafened' => (bool) $access->member?->voice_deafened,
         ];
     }
 

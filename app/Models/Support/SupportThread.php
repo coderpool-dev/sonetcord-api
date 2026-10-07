@@ -13,6 +13,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  */
 class SupportThread extends Model
 {
+    protected $table = 'support_threads';
+
     public const STATUS_OPEN = 'open';
 
     public const STATUS_CLOSED = 'closed';

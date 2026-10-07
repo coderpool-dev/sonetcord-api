@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class GameSession extends Model
 {
+    protected $table = 'game_sessions';
+
     protected $fillable = [
         'user_id',
         'game_id',

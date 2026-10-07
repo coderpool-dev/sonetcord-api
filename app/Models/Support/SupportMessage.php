@@ -9,6 +9,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SupportMessage extends Model
 {
+    protected $table = 'support_messages';
+
     protected $fillable = [
         'thread_id',
         'user_id',

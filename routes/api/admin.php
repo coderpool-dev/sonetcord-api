@@ -5,9 +5,13 @@ use Illuminate\Support\Facades\Route;
 
 // Админка
 Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {
+    Route::get('network-latency', [Admin\AdminNetworkLatencyController::class, 'show'])->name('network-latency.show');
+    Route::get('client-logs', [Admin\AdminClientLogsController::class, 'show'])->name('client-logs.show');
+    Route::get('system-monitor', [Admin\AdminSystemMonitorController::class, 'show'])->name('system-monitor.show');
     Route::get('users', [Admin\UserController::class, 'index'])->name('users.index');
     Route::get('stats', [Admin\StatsController::class, 'show'])->name('stats.show');
     Route::get('activity', [Admin\ActivityController::class, 'show'])->name('activity.show');
+    Route::get('calls', [Admin\ActivityController::class, 'calls'])->name('calls.index');
 
     Route::prefix('game-icon-submissions')->name('game-icon-submissions.')
         ->controller(Admin\GameIconSubmissionController::class)->group(function () {

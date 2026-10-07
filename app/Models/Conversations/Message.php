@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Message extends Model
 {
+    protected $table = 'messages';
+
     protected $fillable = ['user_id', 'channels_id', 'server_channel_id', 'reply_to_id', 'type', 'message', 'meta', 'mentions', 'key_id', 'edited_at'];
 
     protected $casts = [

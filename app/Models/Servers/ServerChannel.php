@@ -17,6 +17,8 @@ use Illuminate\Support\Collection;
  */
 class ServerChannel extends Model
 {
+    protected $table = 'server_channels';
+
     protected $fillable = ['server_id', 'category_id', 'name', 'kind', 'topic', 'position'];
 
     protected $casts = [

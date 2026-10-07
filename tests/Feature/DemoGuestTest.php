@@ -41,20 +41,31 @@ class DemoGuestTest extends TestCase
         $this->withToken($token)->getJson('/api/servers')
             ->assertOk()
             ->assertJsonPath('servers.0.id', $serverId)
-            ->assertJsonPath('servers.0.name', 'Вечерний созвон');
+            ->assertJsonPath('servers.0.name', 'DayZ')
+            ->assertJsonPath('servers.0.icon', Storage::disk('public')->url('server-icons/demo_dayz_v1.jpg'));
 
         // Переписка зашифрована как обычная и читается через обычный API.
         $this->withToken($token)->getJson("/api/server-channel-messages/{$channelId}")
             ->assertOk()
-            ->assertJsonFragment(['message' => 'О, работает без VPN 🔥'])
-            ->assertJsonFragment(['emoji' => '👋']);
+            ->assertJsonFragment(['message' => 'возьмите в пати, у меня топор и две банки фасоли 😅'])
+            ->assertJsonFragment(['emoji' => '😂']);
 
         $this->withToken($token)->getJson('/api/friends')->assertOk();
         $this->assertSame(4, Friend::query()->where('friend_id', $response->json('user.id'))->count());
         $this->assertSame(2, Channel::query()->whereHas('members', fn ($q) => $q->where('users_id', $response->json('user.id')))->count());
         $this->assertSame(6, ServerChannel::query()->where('server_id', $serverId)->count());
 
-        Storage::disk('public')->assertExists('avatars/demo_katya_v2.jpg');
+        Storage::disk('public')->assertExists('avatars/demo_lunitunz_v3.jpg');
+
+        // Демо-друг стримит DayZ в голосовом канале: он в участниках с демонстрацией, превью отдаётся.
+        $stream = ServerChannel::query()->where('server_id', $serverId)->where('name', 'DayZ')->firstOrFail();
+        $streamer = User::query()->where('login', 'demo_lunitunz')->firstOrFail();
+        $this->withToken($token)->getJson("/api/server-channels/{$stream->id}/calls/participants")
+            ->assertOk()
+            ->assertJsonFragment(['user_id' => $streamer->id, 'is_screen_sharing' => true]);
+        $this->withToken($token)->get("/api/server-channels/{$stream->id}/calls/screen-preview/{$streamer->id}")
+            ->assertOk()
+            ->assertHeader('Content-Type', 'image/jpeg');
     }
 
     public function test_personas_are_shared_between_guests(): void
@@ -128,7 +139,7 @@ class DemoGuestTest extends TestCase
         Sanctum::actingAs($guest);
         $this->postJson('/api/auth/online')->assertOk();
 
-        $this->assertTrue(User::query()->where('login', 'demo_lyosha')->firstOrFail()->isOnline());
+        $this->assertTrue(User::query()->where('login', 'demo_lunitunz')->firstOrFail()->isOnline());
     }
 
     public function test_demo_start_is_rate_limited_per_ip(): void

@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Attachment extends Model
 {
+    protected $table = 'attachments';
+
     protected $fillable = [
         'message_id',
         'user_id',

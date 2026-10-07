@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Services\Http\PublicHttpDestination;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Laravel\Sanctum\Sanctum;
@@ -12,6 +13,18 @@ class LinkPreviewControllerTest extends TestCase
 {
     use InteractsWithCalls;
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->app->instance(PublicHttpDestination::class, new class extends PublicHttpDestination
+        {
+            protected function resolveHostname(string $host): array
+            {
+                return ['93.184.215.14'];
+            }
+        });
+    }
 
     public function test_requires_authentication(): void
     {
@@ -88,5 +101,30 @@ class LinkPreviewControllerTest extends TestCase
         $this->getJson('/api/link-preview?url=https://example.com/go')
             ->assertStatus(422)
             ->assertJsonPath('message', 'Ссылка недоступна для предпросмотра');
+    }
+
+    public function test_checks_and_pins_each_redirect_destination(): void
+    {
+        Sanctum::actingAs($this->makeUser(), ['*']);
+        Http::fake(function ($request, array $options) {
+            $host = parse_url($request->url(), PHP_URL_HOST);
+            $this->assertSame([$host.':443:93.184.215.14'], $options['curl'][CURLOPT_RESOLVE]);
+            $this->assertFalse($options['allow_redirects']);
+            $this->assertSame('', $options['proxy']);
+
+            return $host === 'example.com'
+                ? Http::response('', 302, ['Location' => 'https://other.example/page'])
+                : Http::response('<title>Redirected</title><meta property="og:image" content="/cover.png">');
+        });
+        $this->getJson('/api/link-preview?url=https://example.com/page')->assertOk()
+            ->assertJsonPath('title', 'Redirected')->assertJsonPath('image', 'https://other.example/cover.png');
+        Http::assertSentCount(2);
+    }
+
+    public function test_oversized_body_returns_empty_preview(): void
+    {
+        Sanctum::actingAs($this->makeUser(), ['*']);
+        Http::fake(['*' => Http::response('<title>Too large</title>'.str_repeat('x', 500_000))]);
+        $this->getJson('/api/link-preview?url=https://example.com/large')->assertOk()->assertJsonPath('title', null);
     }
 }

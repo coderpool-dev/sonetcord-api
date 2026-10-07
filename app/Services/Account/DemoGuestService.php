@@ -2,6 +2,7 @@
 
 namespace App\Services\Account;
 
+use App\Enums\CallStatus;
 use App\Enums\ChannelType;
 use App\Enums\FriendStatus;
 use App\Enums\MembershipStatus;
@@ -10,6 +11,7 @@ use App\Enums\ServerMembershipStatus;
 use App\Enums\ServerPermission;
 use App\Models\Conversations\Attachment;
 use App\Models\Conversations\Call;
+use App\Models\Conversations\CallSession;
 use App\Models\Conversations\Channel;
 use App\Models\Conversations\ChannelMember;
 use App\Models\Conversations\Message;
@@ -21,6 +23,7 @@ use App\Models\Servers\ServerRole;
 use App\Models\Social\Friend;
 use App\Models\User;
 use App\Services\Conversations\AttachmentService;
+use App\Services\Conversations\CallScreenPreviewService;
 use App\Services\Conversations\EncryptionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -43,14 +46,20 @@ class DemoGuestService
     /** Сколько гость может загрузить в сумме: не даём забить диск и вытеснить чужие вложения. */
     public const UPLOAD_QUOTA_BYTES = 100 * 1024 * 1024;
 
-    private const AVATAR_VERSION = 2;
+    private const AVATAR_VERSION = 3;
+
+    /** Общая иконка демо-серверов: префикс demo_ ServerService не удаляет при смене иконки гостем. */
+    private const SERVER_ICON = 'demo_dayz_v1.jpg';
+
+    /** Кадр демо-стрима живёт, пока жив сам гость: обновлять его некому. */
+    private const STREAM_TTL_SECONDS = (self::TTL_HOURS + 1) * 3600;
 
     /** Ключ — имя файла аватара в resources/demo/avatars и часть логина. */
     private const PERSONAS = [
-        'katya' => ['name' => 'Катя', 'emoji' => '🎧', 'status' => 'слушаю новый альбом', 'color' => '#ff8a5c'],
-        'lyosha' => ['name' => 'Лёша', 'emoji' => '🎮', 'status' => 'кто в катку?', 'color' => '#5865f2'],
-        'mila' => ['name' => 'Мила', 'emoji' => '🌿', 'status' => 'на даче до воскресенья', 'color' => '#23a559'],
-        'anya' => ['name' => 'Аня', 'emoji' => '📚', 'status' => 'сессия, не отвлекайте', 'color' => '#f0b232'],
+        'forestdump' => ['name' => 'forest dump', 'emoji' => '🐟', 'status' => 'лутаю Черногорск', 'color' => '#6b7280'],
+        'lunitunz' => ['name' => 'LuniTunz', 'emoji' => '🔴', 'status' => 'стримлю DayZ', 'color' => '#e5533d'],
+        'yasnova' => ['name' => 'Ya snova s vami', 'emoji' => '💜', 'status' => 'снова с вами', 'color' => '#d946ef'],
+        'batislav' => ['name' => 'BATISLAV', 'emoji' => '🎧', 'status' => 'на Тисах', 'color' => '#c62828'],
     ];
 
     private const MODERATOR_PERMISSIONS = ServerPermission::DEFAULT
@@ -67,6 +76,7 @@ class DemoGuestService
         private readonly SessionService $sessions,
         private readonly AttachmentService $attachments,
         private readonly UserDeletionService $deletion,
+        private readonly CallScreenPreviewService $screenPreviews,
     ) {}
 
     /** @return array{user: User, token: string, server_id: int, channel_id: int} */
@@ -80,7 +90,7 @@ class DemoGuestService
             $guest = $this->createGuest();
             $this->createPersonaFriendships($guest, $personas);
             [$server, $general] = $this->createServer($guest, $personas);
-            $this->createDirectChat($guest, $personas['lyosha']);
+            $this->createDirectChat($guest, $personas['lunitunz']);
             $this->createGroupChat($guest, $personas);
 
             return [$guest, $server, $general];
@@ -189,7 +199,7 @@ class DemoGuestService
     /** Домен .invalid зарезервирован (RFC 2606): письмо на такой адрес не уйдёт никуда. */
     private function personaEmail(string $key): string
     {
-        return "demo-{$key}@sonetcord.invalid";
+        return "demo-{$key}@goidacord.invalid";
     }
 
     /**
@@ -222,7 +232,7 @@ class DemoGuestService
         $guest = new User([
             'name' => 'Гость '.random_int(1000, 9999),
             'login' => $login,
-            'email' => $login.'@demo.sonetcord.invalid',
+            'email' => $login.'@demo.goidacord.invalid',
             'password' => Str::random(40),
             'date' => now(),
             'last_online' => now(),
@@ -247,8 +257,9 @@ class DemoGuestService
     private function createServer(User $guest, array $friends): array
     {
         $server = Server::create([
-            'name' => 'Вечерний созвон',
+            'name' => 'DayZ',
             'description' => 'Демо-сервер: всё настоящее, пробуйте что угодно.',
+            'icon' => $this->ensureServerIcon(),
             'owner_id' => $guest->id,
         ]);
 
@@ -275,31 +286,80 @@ class DemoGuestService
                 'status' => ServerMembershipStatus::Member,
                 'joined_at' => now(),
             ]);
-            $member->roles()->attach($user->is($friends['mila']) ? [$everyone->id, $moderators->id] : [$everyone->id]);
+            $member->roles()->attach($user->is($friends['forestdump']) ? [$everyone->id, $moderators->id] : [$everyone->id]);
         }
 
         $textCategory = $this->createServerChannel($server, 'Текстовые каналы', ServerChannelKind::Category, 0);
         $general = $this->createServerChannel($server, 'общий', ServerChannelKind::Text, 1, $textCategory, 'Болтаем обо всём');
         $screenshotsChannel = $this->createServerChannel($server, 'скриншоты', ServerChannelKind::Text, 2, $textCategory, 'Скрины, фотки, видео');
         $voiceCategory = $this->createServerChannel($server, 'Голосовые каналы', ServerChannelKind::Category, 3);
-        $this->createServerChannel($server, 'Созвон', ServerChannelKind::Voice, 4, $voiceCategory);
-        $this->createServerChannel($server, 'Катка', ServerChannelKind::Voice, 5, $voiceCategory);
+        $this->createServerChannel($server, 'Общий', ServerChannelKind::Voice, 4, $voiceCategory);
+        $stream = $this->createServerChannel($server, 'DayZ', ServerChannelKind::Voice, 5, $voiceCategory);
 
-        $this->postMessage($friends['mila'], $general, 'Всем привет! Это наш сервер для вечерних созвонов 👋', 185);
-        $vpnMessage = $this->postMessage($friends['lyosha'], $general, 'О, работает без VPN 🔥', 183);
-        $this->postMessage($friends['katya'], $general, 'Дискорд опять не грузит, а тут всё летает', 181);
-        $gameInviteMessage = $this->postMessage($friends['anya'], $general, 'Кто сегодня в CS? Я в «Катке» после девяти', 120);
-        $this->postMessage($friends['lyosha'], $general, 'Я в деле. Экран тут показывается в 1080p и 60 fps, так что мой позор увидите в полном качестве', 118, $gameInviteMessage);
-        $this->postMessage($friends['mila'], $general, 'Фотки с дачи закинула в #скриншоты 🌲', 64);
-        $welcomeMessage = $this->postMessage($friends['katya'], $general, 'Привет, новенький! 👋 Тут всё настоящее: пиши, отвечай, ставь реакции, заходи в голосовой, создавай каналы и роли. Через сутки демо сотрётся само.', 3);
+        $this->postMessage($friends['forestdump'], $general, 'го вечером на сервер? вайп был', 190);
+        $raidMessage = $this->postMessage($friends['batislav'], $general, 'я в деле, только сначала в зелёнку за лутом', 187);
+        $this->postMessage($friends['yasnova'], $general, 'возьмите в пати, у меня топор и две банки фасоли 😅', 184);
+        $this->postMessage($friends['forestdump'], $general, 'норм, на спавне найдём тебе чё-нить', 182);
+        $streamMessage = $this->postMessage($friends['lunitunz'], $general, 'я уже на тисах, стримлю в голосовом, залетайте', 121);
+        $heliMessage = $this->postMessage($friends['batislav'], $general, 'смотрю, за тобой вертолёт горит 😂', 118, $streamMessage);
+        $this->postMessage($friends['lunitunz'], $general, 'это не я его сбил, он сам', 117);
+        $this->postMessage($friends['yasnova'], $general, 'кто со мной в березино?', 12);
+        $this->postMessage($friends['forestdump'], $general, 'через 10 мин буду', 9);
 
-        $this->postMessage($friends['mila'], $screenshotsChannel, 'Сюда кидаем скрины и видео. Большие файлы грузятся с докачкой: оборвался интернет — продолжится с того же места.', 63);
+        $this->postMessage($friends['forestdump'], $screenshotsChannel, 'сюда кидаем скрины и клипы', 63);
 
-        $this->addReactions($vpnMessage, [$friends['katya'], $friends['anya']], '🔥');
-        $this->addReactions($gameInviteMessage, [$friends['lyosha'], $friends['mila']], '🎮');
-        $this->addReactions($welcomeMessage, [$friends['mila'], $friends['lyosha'], $friends['anya']], '👋');
+        $this->addReactions($raidMessage, [$friends['yasnova'], $friends['lunitunz']], '🔥');
+        $this->addReactions($streamMessage, [$friends['batislav'], $friends['forestdump']], '🎮');
+        $this->addReactions($heliMessage, [$friends['forestdump'], $friends['lunitunz'], $friends['yasnova']], '😂');
+
+        $this->startDemoStream($stream, $friends['lunitunz'], [$friends['batislav']]);
 
         return [$server, $general];
+    }
+
+    private function ensureServerIcon(): string
+    {
+        $disk = Storage::disk('public');
+        if (! $disk->exists('server-icons/'.self::SERVER_ICON)) {
+            $disk->put('server-icons/'.self::SERVER_ICON, (string) file_get_contents(resource_path('demo/server-icon.jpg')));
+        }
+
+        return self::SERVER_ICON;
+    }
+
+    /**
+     * Демо-друг «стримит» DayZ в голосовом канале: сессия с флагом демонстрации и кадр превью.
+     * Настоящего видео нет, поэтому last_seen_at — на весь срок жизни гостя, иначе уборка по
+     * таймауту убрала бы стримера из канала; удаляется вместе с сервером гостя.
+     *
+     * @param  list<User>  $viewers
+     */
+    private function startDemoStream(ServerChannel $channel, User $streamer, array $viewers): void
+    {
+        $call = Call::create([
+            'call_id' => Str::uuid()->toString(),
+            'server_channel_id' => $channel->id,
+            'initiator_id' => $streamer->id,
+            'status' => CallStatus::Active,
+        ]);
+
+        foreach ([$streamer, ...$viewers] as $user) {
+            CallSession::query()->create([
+                'call_id' => $call->call_id,
+                'session_id' => 'demo-'.$user->id,
+                'user_id' => $user->id,
+                'server_channel_id' => $channel->id,
+                'last_seen_at' => now()->addSeconds(self::STREAM_TTL_SECONDS),
+                'screen_sharing' => $user->is($streamer),
+            ]);
+        }
+
+        $this->screenPreviews->storeFrameForServerChannel(
+            $streamer,
+            (int) $channel->id,
+            (string) file_get_contents(resource_path('demo/stream-dayz.jpg')),
+            self::STREAM_TTL_SECONDS,
+        );
     }
 
     private function createServerChannel(
@@ -328,36 +388,37 @@ class DemoGuestService
             ChannelMember::create(['users_id' => $user->id, 'channels_id' => $channel->id, 'status' => MembershipStatus::Admin]);
         }
 
-        $this->postMessage($demoFriend, $channel, 'Привет! Я Лёша, один из демо-друзей 🙂', 30);
-        $this->postMessage($demoFriend, $channel, 'Звонки тут как в Discord, но я демо-друг и трубку не возьму 😅 Позвони настоящим друзьям, когда зарегистрируешься. А пока загляни на сервер «Вечерний созвон» слева.', 29);
+        $this->postMessage($demoFriend, $channel, 'йо 👋', 30);
+        $this->postMessage($demoFriend, $channel, 'я демо-друг, так что звонить бесполезно, трубку не возьму 😅 заходи на сервер DayZ слева, я там стримлю', 29);
     }
 
     /** @param  array<string, User>  $friends */
     private function createGroupChat(User $guest, array $friends): void
     {
-        $channel = Channel::create(['name' => 'Дача в субботу 🌲', 'status' => ChannelType::Group]);
+        $channel = Channel::create(['name' => 'Вылазка в субботу 🪖', 'status' => ChannelType::Group]);
+        $organizer = $friends['forestdump'];
 
-        foreach ([$friends['mila'], $guest, $friends['katya'], $friends['anya']] as $user) {
+        foreach ([$organizer, $guest, $friends['yasnova'], $friends['batislav']] as $user) {
             ChannelMember::create([
                 'users_id' => $user->id,
                 'channels_id' => $channel->id,
-                'status' => $user->is($friends['mila']) ? MembershipStatus::Admin : MembershipStatus::Member,
+                'status' => $user->is($organizer) ? MembershipStatus::Admin : MembershipStatus::Member,
             ]);
         }
 
         $creationMessage = new Message([
-            'user_id' => $friends['mila']->id,
+            'user_id' => $organizer->id,
             'channels_id' => $channel->id,
             'type' => 'system',
-            'message' => 'Мила создал(а) беседу',
-            'meta' => ['event' => 'channel_created', 'actor_name' => 'Мила'],
+            'message' => "{$organizer->name} создал(а) беседу",
+            'meta' => ['event' => 'channel_created', 'actor_name' => $organizer->name],
         ]);
         $this->backdateMessage($creationMessage, 300)->save();
 
-        $this->postMessage($friends['mila'], $channel, 'Едем в субботу к 12?', 299);
-        $this->postMessage($friends['anya'], $channel, 'Я за рулём, возьму троих', 290);
-        $this->postMessage($friends['katya'], $channel, 'Беру гитару 🎸', 285);
-        $this->postMessage($friends['mila'], $channel, 'Тогда в 12 у метро', 280);
+        $this->postMessage($organizer, $channel, 'в субботу в 20:00 на сервер?', 299);
+        $this->postMessage($friends['batislav'], $channel, 'я за, беру m4', 290);
+        $this->postMessage($friends['yasnova'], $channel, 'на мне аптечки и еда 🥫', 285);
+        $this->postMessage($organizer, $channel, 'тогда в 20:00 у черно', 280);
     }
 
     /** Сообщение с текстом, зашифрованным так же, как у обычных (MessageService::storeText). */

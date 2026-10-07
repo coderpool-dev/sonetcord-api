@@ -13,13 +13,13 @@ use Illuminate\Support\Facades\Route;
 // Вход, регистрация, восстановление пароля
 Route::controller(AuthController::class)->name('auth.')->group(function () {
     Route::post('login', 'login')->middleware('throttle:login')->name('login');
-    Route::post('register', 'register')->middleware('throttle:register')->name('register');
-    Route::post('forgot-password', 'forgotPassword')->middleware('throttle:forgot-password')->name('password.forgot');
+    Route::post('register', 'register')->middleware(['throttle:register', 'captcha'])->name('register');
+    Route::post('forgot-password', 'forgotPassword')->middleware(['throttle:forgot-password', 'captcha'])->name('password.forgot');
     Route::post('reset-password', 'resetPassword')->middleware('throttle:reset-password')->name('password.reset');
 });
 
 // Демо-вход с лендинга: временный аккаунт на сутки (DemoGuestService).
-Route::post('demo', [DemoGuestController::class, 'store'])->middleware('throttle:demo')->name('demo.start');
+Route::post('demo', [DemoGuestController::class, 'store'])->middleware(['throttle:demo', 'captcha'])->name('demo.start');
 
 // Ссылка из письма. Имя роута Laravel использует для подписанных ссылок подтверждения.
 Route::get('email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])

@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class FeedbackMessage extends Model
 {
+    protected $table = 'feedback_messages';
+
     public const STATUS_NEW = 'new';
 
     public const STATUS_READ = 'read';

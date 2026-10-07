@@ -1,6 +1,15 @@
 <?php
 
+use App\Http\Controllers\API\ClientDiagnosticsController;
+use App\Http\Controllers\API\NetworkLatencyController;
 use Illuminate\Support\Facades\Route;
+
+Route::get('network-latency/probe', [NetworkLatencyController::class, 'probe'])
+    ->middleware(['auth:sanctum', 'throttle:network-latency'])->name('network-latency.probe');
+Route::post('network-latency', [NetworkLatencyController::class, 'store'])
+    ->middleware(['auth:sanctum', 'throttle:network-latency'])->name('network-latency.store');
+Route::post('client-diagnostics', ClientDiagnosticsController::class)
+    ->middleware(['auth:sanctum', 'throttle:client-diagnostics'])->name('client-diagnostics.store');
 
 /*
 |--------------------------------------------------------------------------

@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class YandexMusicConnection extends Model
 {
+    protected $table = 'yandex_music_connections';
+
     /** Трек без свежих данных дольше этого считается закончившимся. */
     public const TRACK_GRACE_SECONDS = 60;
 

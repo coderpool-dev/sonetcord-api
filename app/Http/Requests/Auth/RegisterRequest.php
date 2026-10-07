@@ -19,7 +19,7 @@ class RegisterRequest extends FormRequest
             'email' => 'required|string|email|max:255',
             'login' => ['required', 'string', 'min:3', 'max:32', 'regex:/^[^@]+$/'],
             'password' => 'required|string|min:8|confirmed',
-            'date' => 'sometimes|date',
+            'date' => 'sometimes|date|after_or_equal:1900-01-01|before_or_equal:today',
         ];
     }
 
@@ -71,6 +71,8 @@ class RegisterRequest extends FormRequest
             'password.min' => 'Пароль должен содержать минимум 8 символов',
             'password.confirmed' => 'Пароли не совпадают',
             'date.date' => 'Неверный формат даты',
+            'date.after_or_equal' => 'Неверная дата рождения',
+            'date.before_or_equal' => 'Неверная дата рождения',
         ];
     }
 }

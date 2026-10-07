@@ -18,7 +18,7 @@ class UpdateProfileRequest extends FormRequest
         return [
             'name' => 'sometimes|string|max:255',
             'email' => 'sometimes|string|email|max:255|unique:users,email,'.$userId,
-            'date' => 'sometimes|date',
+            'date' => 'sometimes|date|after_or_equal:1900-01-01|before_or_equal:today',
             'current_password' => 'sometimes|required_with:new_password|string',
             'new_password' => 'sometimes|required_with:current_password|string|min:8|confirmed',
             'avatar' => 'sometimes|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
@@ -47,6 +47,8 @@ class UpdateProfileRequest extends FormRequest
             'email.max' => 'Email не должен превышать 255 символов',
             'email.unique' => 'Этот email уже используется другим пользователем',
             'date.date' => 'Неверный формат даты',
+            'date.after_or_equal' => 'Неверная дата рождения',
+            'date.before_or_equal' => 'Неверная дата рождения',
             'current_password.required_with' => 'Текущий пароль обязателен при изменении пароля',
             'current_password.string' => 'Текущий пароль должен быть строкой',
             'new_password.required_with' => 'Новый пароль обязателен при изменении пароля',

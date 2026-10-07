@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 /** «Заглушить» чат / канал сервера / сервер — см. App\Services\Conversations\NotificationMuteService. */
 class NotificationMute extends Model
 {
+    protected $table = 'notification_mutes';
+
     public const TYPE_CHANNEL = 'channel';
 
     public const TYPE_SERVER = 'server';

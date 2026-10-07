@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SitePresenceSession extends Model
 {
+    protected $table = 'site_presence_sessions';
+
     protected $fillable = [
         'session_key',
         'user_id',

@@ -2,19 +2,25 @@
 
 namespace App\Services\Account;
 
+use App\Jobs\DeliverWebPush;
 use App\Models\Account\PushSubscription;
+use App\Services\Http\PublicHttpDestination;
+use App\Support\PushEndpoint;
+use GuzzleHttp\Handler\CurlHandler;
+use GuzzleHttp\HandlerStack;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
+use Minishlink\WebPush\MessageSentReport;
 use Minishlink\WebPush\Subscription;
 use Minishlink\WebPush\WebPush;
-use Throwable;
 
 /**
  * Web Push (VAPID): личные сообщения, упоминания на сервере, входящие звонки — даже когда вкладка
  * закрыта. Service Worker на фронте сам не показывает уведомление, если приложение открыто и в
- * фокусе (там всё видно и так). Отправка — после ответа клиенту: чужой push-сервис не должен
- * тормозить отправку сообщения. Протухшие подписки (404/410) удаляются.
+ * фокусе (там всё видно и так). Отправка — отдельной задачей после коммита.
+ * Протухшие подписки (404/410) удаляются, временные ошибки повторяет очередь.
  */
 class PushNotificationService
 {
@@ -27,6 +33,9 @@ class PushNotificationService
 
     public function subscribe(int $userId, string $endpoint, string $p256dh, string $auth, ?string $userAgent): void
     {
+        if (! PushEndpoint::isAllowed($endpoint)) {
+            throw ValidationException::withMessages(['endpoint' => ['Недопустимый адрес push-сервиса']]);
+        }
         PushSubscription::query()->updateOrCreate(
             ['endpoint_hash' => hash('sha256', $endpoint)],
             [
@@ -58,7 +67,9 @@ class PushNotificationService
             return;
         }
 
-        dispatch(fn () => $this->deliver($userIds, $payload))->afterResponse();
+        foreach ($this->subscriptionsFor($userIds) as $subscription) {
+            DeliverWebPush::dispatch((int) $subscription->id, $payload);
+        }
     }
 
     /** Приложение для Windows пингует /auth/online раз в 15 с даже из трея: без пинга минуту — закрыто. */
@@ -93,40 +104,56 @@ class PushNotificationService
         return "push:desktop-app:{$userId}";
     }
 
-    /** @param int[] $userIds */
-    private function deliver(array $userIds, array $payload): void
+    public function deliver(int $subscriptionId, array $payload): void
     {
-        $subscriptions = $this->subscriptionsFor($userIds);
-        if ($subscriptions->isEmpty()) {
+        $subscription = PushSubscription::query()->find($subscriptionId);
+        if (! $subscription || ! $this->isConfigured()) {
+            return;
+        }
+        // Validate again: old rows and DNS changes must not bypass the destination policy.
+        if (! PushEndpoint::isAllowed($subscription->endpoint)) {
+            $subscription->delete();
+
+            return;
+        }
+        if ($this->subscriptionsFor([(int) $subscription->user_id])->doesntContain('id', $subscriptionId)) {
             return;
         }
 
-        try {
-            $webPush = new WebPush([
-                'VAPID' => [
-                    'subject' => config('services.webpush.subject'),
-                    'publicKey' => config('services.webpush.public_key'),
-                    'privateKey' => config('services.webpush.private_key'),
-                ],
-            ], ['TTL' => 3600, 'urgency' => ($payload['kind'] ?? '') === 'call' ? 'high' : 'normal'], 10);
-
-            $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
-            foreach ($subscriptions as $sub) {
-                $webPush->queueNotification(
-                    Subscription::create(['endpoint' => $sub->endpoint, 'keys' => ['p256dh' => $sub->p256dh, 'auth' => $sub->auth]]),
-                    $json,
-                );
+        $options = app(PublicHttpDestination::class)->curlOptions($subscription->endpoint);
+        $report = $this->sendNotification($subscription, $payload, $options);
+        if ($report->isSubscriptionExpired()) {
+            $subscription->delete();
+        } elseif (! $report->isSuccess()) {
+            $status = $report->getResponse()?->getStatusCode();
+            if ($status === null || $status === 429 || $status >= 500) {
+                // Do not include endpoints or payloads in exceptions stored by the queue.
+                throw new \RuntimeException('Temporary Web Push delivery failure');
             }
-
-            foreach ($webPush->flush() as $report) {
-                if ($report->isSubscriptionExpired()) {
-                    PushSubscription::query()->where('endpoint_hash', hash('sha256', $report->getEndpoint()))->delete();
-                } elseif (! $report->isSuccess()) {
-                    Log::info('web_push_failed', ['reason' => mb_substr((string) $report->getReason(), 0, 200)]);
-                }
-            }
-        } catch (Throwable $e) {
-            Log::warning('web_push_error', ['error' => $e->getMessage()]);
+            Log::info('web_push_failed', ['subscription_id' => $subscriptionId, 'status' => $status]);
         }
+    }
+
+    protected function sendNotification(PushSubscription $subscription, array $payload, array $curlOptions): MessageSentReport
+    {
+        $webPush = new WebPush([
+            'VAPID' => [
+                'subject' => config('services.webpush.subject'),
+                'publicKey' => config('services.webpush.public_key'),
+                'privateKey' => config('services.webpush.private_key'),
+            ],
+        ], ['TTL' => ($payload['kind'] ?? '') === 'call' ? 60 : 3600,
+            'urgency' => ($payload['kind'] ?? '') === 'call' ? 'high' : 'normal'], 10, [
+                'handler' => HandlerStack::create(new CurlHandler),
+                'allow_redirects' => false,
+                'proxy' => '',
+                'curl' => $curlOptions,
+            ]);
+
+        return $webPush->sendOneNotification(
+            Subscription::create(['endpoint' => $subscription->endpoint,
+                'keys' => ['p256dh' => $subscription->p256dh, 'auth' => $subscription->auth]]),
+            json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+        );
     }
 }

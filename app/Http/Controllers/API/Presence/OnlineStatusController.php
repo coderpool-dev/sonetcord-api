@@ -36,7 +36,7 @@ class OnlineStatusController extends Controller
         }
 
         $this->activity->markActiveDay($user);
-        $this->stats->recordOnlinePresence();
+        $this->stats->recordOnlinePresencePeriodically();
 
         $platform = $this->deviceParser->platformKind($request->userAgent());
         if ($user->last_platform !== $platform) {

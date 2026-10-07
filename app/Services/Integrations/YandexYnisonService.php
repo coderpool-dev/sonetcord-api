@@ -16,7 +16,7 @@ class YandexYnisonService
 {
     private const REDIRECT_URL = 'wss://ynison.music.yandex.ru/redirector.YnisonRedirectService/GetRedirectToYnison';
 
-    public function __construct(private readonly YandexMusicApiClient $api) {}
+    public function __construct(private readonly YandexMusicTrackCatalog $tracks) {}
 
     public function fetchCurrentTrack(string $accessToken): ?array
     {
@@ -96,7 +96,7 @@ class YandexYnisonService
 
         // Ynison часто не присылает исполнителя или длительность — дополняем из API треков.
         $fetched = ($artist === '' || $durationMs === null) && $trackId !== null
-            ? $this->api->track($accessToken, $trackId)
+            ? $this->tracks->track($accessToken, $trackId)
             : null;
 
         if ($fetched === null) {
@@ -242,7 +242,8 @@ class YandexYnisonService
     private function openSocket(string $url, string $accessToken, string $protocol): Client
     {
         return new Client($url, [
-            'timeout' => 10,
+            // Каждый опрос держит воркер php-fpm: при зависшем Яндексе 10 с на запрос быстро занимали весь пул.
+            'timeout' => 4,
             'headers' => [
                 'Authorization' => 'OAuth '.$accessToken,
                 'Origin' => 'https://music.yandex.ru',

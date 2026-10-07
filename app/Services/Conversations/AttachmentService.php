@@ -16,6 +16,7 @@ use App\Support\FileName;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -236,8 +237,18 @@ class AttachmentService
             throw new RuntimeException('Failed to read attachment');
         }
 
+        $image = null;
         if ($this->images->canCompress($mime)) {
-            $image = $this->images->compress($binary);
+            try {
+                $image = $this->images->compress($binary);
+            } catch (RuntimeException $e) {
+                // GD не смог прочитать картинку (битая, HEIC под видом JPEG и т.п.) — сохраняем как файл,
+                // а не роняем загрузку целиком.
+                Log::warning('attachment image not compressible, stored as file', ['mime' => $mime, 'error' => $e->getMessage()]);
+            }
+        }
+
+        if ($image !== null) {
             $binary = $image['binary'];
             $extension = $image['ext'];
             $meta = [
@@ -248,7 +259,8 @@ class AttachmentService
                 'height' => $image['height'],
             ];
         } else {
-            $isImage = $this->images->isImage($mime);
+            // Картинку, которую не удалось сжать, показываем файлом: браузер её, скорее всего, тоже не прочитает.
+            $isImage = $this->images->isImage($mime) && ! $this->images->canCompress($mime);
             [$width, $height] = $isImage ? $this->images->dimensions($path) : [null, null];
             $extension = FileName::extension($name, $mime);
             $meta = [

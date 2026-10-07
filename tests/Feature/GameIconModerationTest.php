@@ -66,54 +66,56 @@ class GameIconModerationTest extends TestCase
             ->assertUnprocessable();
     }
 
-    public function test_rejection_keeps_published_icon_and_removes_private_file(): void
+    public function test_rejection_removes_private_file_and_publishes_nothing(): void
     {
-        Storage::disk('public')->put('game-icons/old.png', 'old image');
-        GameIcon::query()->create([
-            'slug' => 'minecraft', 'name' => 'Minecraft', 'file' => 'old.png',
-            'icon_hash' => str_repeat('0', 64), 'source_priority' => 3,
-        ]);
         Sanctum::actingAs(User::factory()->create());
         $this->postJson('/api/games/icons', [
             'name' => 'Minecraft', 'icon' => UploadedFile::fake()->image('new.png', 64, 64),
             'source' => 'folder',
-        ])->assertStatus(202)->assertJsonPath('exists', true);
+        ])->assertStatus(202)->assertJsonPath('exists', false);
         $submission = GameIconSubmission::query()->firstOrFail();
 
         Sanctum::actingAs($this->admin());
         $this->postJson("/api/admin/game-icon-submissions/{$submission->id}/reject")->assertOk();
 
-        $this->assertSame('old.png', GameIcon::query()->firstOrFail()->file);
-        $this->assertTrue(Storage::disk('public')->exists('game-icons/old.png'));
+        $this->assertSame(0, GameIcon::query()->count());
         $this->assertFalse(Storage::disk('local')->exists($submission->file));
         $this->assertSame('rejected', $submission->fresh()->status);
         Event::assertNotDispatched(GameIconUploaded::class);
     }
 
-    public function test_approval_replaces_existing_icon_only_after_review(): void
+    public function test_upload_for_game_that_already_has_icon_creates_no_submission(): void
     {
         Storage::disk('public')->put('game-icons/old.png', 'old image');
         GameIcon::query()->create([
             'slug' => 'minecraft', 'name' => 'Minecraft', 'file' => 'old.png',
-            'icon_hash' => str_repeat('0', 64), 'source_priority' => 3,
+            'icon_hash' => str_repeat('0', 64), 'source_priority' => 1,
         ]);
         Sanctum::actingAs(User::factory()->create());
+
+        foreach (['Minecraft', 'Minecraft 1.21.4'] as $name) {
+            $this->postJson('/api/games/icons', [
+                'name' => $name, 'icon' => UploadedFile::fake()->image('new.webp', 64, 64), 'source' => 'steam',
+            ])->assertOk()->assertJsonPath('exists', true)->assertJsonPath('pending', false);
+        }
+
+        $this->assertSame(0, GameIconSubmission::query()->count());
+        $this->assertSame('old.png', GameIcon::query()->firstOrFail()->file);
+    }
+
+    public function test_one_pending_submission_per_game_across_players(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+        $first = $this->postJson('/api/games/icons', [
+            'name' => 'Dota 2', 'icon' => UploadedFile::fake()->image('a.png', 64, 64), 'source' => 'steam',
+        ])->assertStatus(202)->json('submission_id');
+
+        Sanctum::actingAs(User::factory()->create());
         $this->postJson('/api/games/icons', [
-            'name' => 'Minecraft', 'icon' => UploadedFile::fake()->image('new.webp', 64, 64),
-            'source' => 'folder',
-        ])->assertStatus(202);
-        $this->assertTrue(Storage::disk('public')->exists('game-icons/old.png'));
-        $submission = GameIconSubmission::query()->firstOrFail();
+            'name' => 'Dota 2', 'icon' => UploadedFile::fake()->image('b.png', 64, 64), 'source' => 'exe',
+        ])->assertJsonPath('pending', true)->assertJsonPath('submission_id', $first);
 
-        Sanctum::actingAs($this->admin());
-        $this->postJson("/api/admin/game-icon-submissions/{$submission->id}/approve", ['source_priority' => 1])->assertOk();
-
-        $icon = GameIcon::query()->firstOrFail();
-        $this->assertNotSame('old.png', $icon->file);
-        $this->assertSame(1, $icon->source_priority);
-        $this->assertTrue(Storage::disk('public')->exists('game-icons/'.$icon->file));
-        $this->assertFalse(Storage::disk('public')->exists('game-icons/old.png'));
-        Event::assertDispatched(GameIconUploaded::class, 1);
+        $this->assertSame(1, GameIconSubmission::query()->count());
     }
 
     private function admin(): User

@@ -21,6 +21,7 @@ use App\Models\User;
 use App\Services\Account\PushNotificationService;
 use App\Services\Servers\ServerChannelCallService;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -46,24 +47,31 @@ class CallService
 
     public function create(User $user, int $channelId): CallStart
     {
-        $channel = Channel::query()->findOrFail($channelId);
-        $this->assertPeerAllowed($user, $channel->id);
+        [$channel, $call, $created] = DB::transaction(function () use ($user, $channelId) {
+            // Lock the parent even when no call exists yet; locking an empty result is insufficient.
+            $channel = Channel::query()->whereKey($channelId)->lockForUpdate()->firstOrFail();
+            $this->assertPeerAllowed($user, $channel->id);
+            $existingCall = Call::activeIn($channel->id);
+            if ($existingCall) {
+                return [$channel, $existingCall, false];
+            }
 
-        $existingCall = Call::activeIn($channel->id);
+            $call = Call::create([
+                'call_id' => Str::uuid()->toString(),
+                'channel_id' => $channel->id,
+                'initiator_id' => $user->id,
+                'status' => CallStatus::Active,
+                'understaffed_at' => now(),
+            ]);
 
-        if ($existingCall) {
-            $this->leaveOtherCalls($user, $channel->id, $existingCall->call_id);
+            return [$channel, $call, true];
+        }, 3);
 
-            return new CallStart($this->callPayload($existingCall, $user), created: false);
+        if (! $created) {
+            $this->leaveOtherCalls($user, $channel->id, $call->call_id);
+
+            return new CallStart($this->callPayload($call, $user), created: false);
         }
-
-        $call = Call::create([
-            'call_id' => Str::uuid()->toString(),
-            'channel_id' => $channel->id,
-            'initiator_id' => $user->id,
-            'status' => CallStatus::Active,
-            'understaffed_at' => now(),
-        ]);
 
         $this->leaveOtherCalls($user, $channel->id, $call->call_id);
         $this->setMemberCallStatus($channel->id, $user->id, MemberCallStatus::InCall);
@@ -158,11 +166,18 @@ class CallService
         ]);
     }
 
-    public function accept(User $user, int $channelId, ?string $sessionId = null): void
+    /**
+     * $expectedCallId — звонок, который клиент принимает. Если в канале уже другой (тот закончился,
+     * начался новый), не пускаем: клиент войдёт в новый звонок сам, когда покажет его человеку.
+     */
+    public function accept(User $user, int $channelId, ?string $sessionId = null, ?string $expectedCallId = null): void
     {
         $this->assertPeerAllowed($user, $channelId);
 
         $call = Call::activeIn($channelId) ?? throw new ApiException('В канале нет активного звонка', 404);
+        if ($expectedCallId !== null && $expectedCallId !== (string) $call->call_id) {
+            throw new ApiException('Этот звонок уже закончился — в чате идёт новый', 409);
+        }
 
         // Уже отмечен «в звонке» — это не первый вход, а повтор: пропущенные пинги, ручной
         // retry или клиент молча перезагрузился (например, после деплоя фронта) и зовёт

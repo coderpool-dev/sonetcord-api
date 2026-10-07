@@ -353,7 +353,7 @@
 <body>
 
 <header>
-    <div class="logo">Sonet<span>Cord</span></div>
+    <div class="logo">Goida<span>Cord</span></div>
     <div class="header-right">
         <span class="status">Работает</span>
         <span class="version">API / v1</span>

@@ -34,7 +34,7 @@ class SessionDeviceParser
 
     /**
      * Грубая классификация клиента для статистики «веб / ПК-приложение / телефон».
-     * desktop = наш Electron-клиент (SonetCord/…); mobile = телефон/планшет; web = браузер.
+     * desktop = наш Electron-клиент (SonetCord/…, старые версии — SonetCord/…); mobile = телефон/планшет; web = браузер.
      */
     public function platformKind(?string $userAgent): string
     {
@@ -43,7 +43,7 @@ class SessionDeviceParser
             return 'web';
         }
 
-        if (stripos($userAgent, 'SonetCord') !== false || stripos($userAgent, 'Electron/') !== false) {
+        if ($this->isDesktopApp($userAgent)) {
             return 'desktop';
         }
 
@@ -52,6 +52,12 @@ class SessionDeviceParser
         }
 
         return 'web';
+    }
+
+    /** Десктоп-клиент до 1.1.3 представлялся как SonetCord/…, новый — как SonetCord/…. */
+    private function isDesktopApp(string $userAgent): bool
+    {
+        return (bool) preg_match('/SonetCord|SonetCord|Electron\//i', $userAgent);
     }
 
     private function detectOs(string $userAgent): ?string
@@ -83,10 +89,10 @@ class SessionDeviceParser
 
     private function detectClient(string $userAgent): ?string
     {
-        if (preg_match('/SonetCord\/([\d.]+)/i', $userAgent, $matches)) {
+        if (preg_match('/(?:SonetCord|SonetCord)\/([\d.]+)/i', $userAgent, $matches)) {
             return 'SonetCord '.$matches[1];
         }
-        if (stripos($userAgent, 'SonetCord') !== false || stripos($userAgent, 'Electron/') !== false) {
+        if ($this->isDesktopApp($userAgent)) {
             return 'SonetCord';
         }
         if (preg_match('/Edg\/(\d+)/', $userAgent, $matches)) {

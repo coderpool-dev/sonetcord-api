@@ -68,6 +68,28 @@ class AttachmentControllerTest extends TestCase
         $this->assertFalse(str_starts_with($stored, 'RIFF'));
     }
 
+    public function test_unreadable_image_is_stored_as_file_instead_of_failing(): void
+    {
+        $user = $this->makeUser();
+        $channel = $this->makeChannel();
+        $this->addMember($channel, $user);
+
+        Sanctum::actingAs($user);
+
+        // Сигнатура PNG (finfo скажет image/png), но дальше мусор — GD прочитать не сможет.
+        $broken = "\x89PNG\r\n\x1a\n".str_repeat("\x00garbage", 64);
+
+        $this->postJson('/api/messages/attachment', [
+            'channels_id' => $channel->id,
+            'file' => UploadedFile::fake()->createWithContent('broken.png', $broken),
+        ])->assertCreated();
+
+        $attachment = Message::where('channels_id', $channel->id)->firstOrFail()->meta['attachment'];
+        $this->assertSame('file', $attachment['kind']);
+        $this->assertSame('image/png', $attachment['mime']);
+        Storage::disk('local')->assertExists($attachment['disk_path']);
+    }
+
     public function test_member_can_upload_a_document_as_file(): void
     {
         $user = $this->makeUser();

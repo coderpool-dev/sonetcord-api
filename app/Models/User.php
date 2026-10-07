@@ -32,14 +32,18 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
+    protected $table = 'users';
+
     /**
-     * Сколько секунд статус игры виден без подтверждения от клиента. Веб подтверждает раз в 10 с,
-     * десктоп раз в 5 с. Если клиент упал, не очистив статус, тот пропадёт сам.
+     * Сколько секунд статус игры виден без подтверждения от клиента. Десктоп подтверждает раз в 15 с. Если клиент упал, не очистив статус, тот пропадёт сам.
      */
     public const GAME_STATUS_TTL_SECONDS = 40;
 
-    /** Сколько секунд после last_online пользователь считается «в сети». */
-    public const ONLINE_THRESHOLD_SECONDS = 30;
+    /** Сколько секунд после last_online пользователь считается «в сети». Клиент шлёт сигнал раз в 25 с. */
+    public const ONLINE_THRESHOLD_SECONDS = 60;
+
+    /** Чаще этого last_online не перезаписываем: точность «в сети» — ONLINE_THRESHOLD_SECONDS. */
+    public const LAST_ONLINE_WRITE_SECONDS = 5;
 
     /** users.demo_kind: временный аккаунт демо-входа и постоянный демо-друг (см. DemoGuestService). */
     public const DEMO_GUEST = 'guest';
@@ -168,9 +172,20 @@ class User extends Authenticatable
         return $this->isDemoGuest() ? $this->created_at?->copy()->addHours(DemoGuestService::TTL_HOURS) : null;
     }
 
+    /**
+     * Отмечает «в сети». Без updated_at: он входит в адрес аватарки (?v=), и сигнал онлайна раз в 25 с
+     * менял адрес — браузеры заново скачивали аватарки всех, кто в сети. Пишет не чаще раза
+     * в LAST_ONLINE_WRITE_SECONDS: так же отмечают и пинги звонка (раз в 15 с с каждого устройства).
+     */
     public function touchLastOnline(): void
     {
-        $this->update(['last_online' => now()]);
+        $now = now();
+        static::query()->whereKey($this->getKey())
+            ->where(fn ($query) => $query->whereNull('last_online')
+                ->orWhere('last_online', '<', $now->copy()->subSeconds(self::LAST_ONLINE_WRITE_SECONDS)))
+            ->toBase()
+            ->update(['last_online' => $now]);
+        $this->forceFill(['last_online' => $now])->syncOriginalAttribute('last_online');
     }
 
     public function isOnline(): bool

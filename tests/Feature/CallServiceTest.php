@@ -152,6 +152,24 @@ class CallServiceTest extends TestCase
         $this->assertSame(MemberCallStatus::InCall, $this->callStatusOf($channel, $joiner->id));
     }
 
+    // 2026-10-04: клиент Viper восстанавливал старый звонок, а accept по каналу пустил его в новый
+    // звонок yashik — в комнату которого клиент так и не вошёл. Чужой звонок не принимаем.
+    public function test_accept_rejects_call_that_was_replaced_by_a_new_one(): void
+    {
+        $channel = $this->makeChannel();
+        $initiator = $this->makeUser();
+        $joiner = $this->makeUser();
+        $this->addMember($channel, $initiator, MembershipStatus::Admin, MemberCallStatus::InCall);
+        $this->addMember($channel, $joiner);
+        $call = $this->makeActiveCall($channel, $initiator);
+
+        $this->assertRejectedWith(409, fn () => $this->service->accept($joiner, $channel->id, 'sess', 'ended-call-id'));
+        $this->assertSame(MemberCallStatus::Idle, $this->callStatusOf($channel, $joiner->id));
+
+        $this->service->accept($joiner, $channel->id, 'sess', (string) $call->call_id);
+        $this->assertSame(MemberCallStatus::InCall, $this->callStatusOf($channel, $joiner->id));
+    }
+
     public function test_leave_ends_call_when_last_participant_leaves(): void
     {
         Event::fake([CallEnded::class]);
@@ -376,6 +394,44 @@ class CallServiceTest extends TestCase
         ]);
     }
 
+    public function test_heartbeat_restores_recently_ended_call_with_same_live_session(): void
+    {
+        $channel = $this->makeChannel();
+        $user = $this->makeUser(['name' => 'EgoOne']);
+        $this->addMember($channel, $user, MembershipStatus::Member, MemberCallStatus::InCall);
+        $call = $this->makeActiveCall($channel, $user);
+        $this->makeSession($call, $user->id, 'sess-1', now()->subSeconds(15));
+
+        Message::createSystem(
+            $channel->id,
+            $user->id,
+            'call_ended',
+            ['event' => 'call_ended', 'call_id' => $call->call_id],
+            'EgoOne '."\u{043d}\u{0430}\u{0447}\u{0430}\u{043b}(\u{0430}) \u{0437}\u{0432}\u{043e}\u{043d}\u{043e}\u{043a}, \u{043a}\u{043e}\u{0442}\u{043e}\u{0440}\u{044b}\u{0439} \u{043f}\u{0440}\u{043e}\u{0434}\u{043b}\u{0438}\u{043b}\u{0441}\u{044f} 207 \u{043c}\u{0438}\u{043d} 29 \u{0441}\u{0435}\u{043a}",
+        );
+        $call->forceFill([
+            'status' => CallStatus::Ended,
+            'understaffed_at' => now()->subMinutes(10),
+        ])->save();
+
+        $heartbeat = $this->presence->heartbeat($user, $channel->id, 'sess-1', false, $call->call_id);
+
+        $this->assertTrue($heartbeat['active']);
+        $this->assertFalse($heartbeat['superseded']);
+        $this->assertDatabaseHas('calls', [
+            'call_id' => $call->call_id,
+            'status' => 'active',
+        ]);
+        $this->assertDatabaseMissing('messages', [
+            'message' => 'EgoOne '."\u{043d}\u{0430}\u{0447}\u{0430}\u{043b}(\u{0430}) \u{0437}\u{0432}\u{043e}\u{043d}\u{043e}\u{043a}, \u{043a}\u{043e}\u{0442}\u{043e}\u{0440}\u{044b}\u{0439} \u{043f}\u{0440}\u{043e}\u{0434}\u{043b}\u{0438}\u{043b}\u{0441}\u{044f} 207 \u{043c}\u{0438}\u{043d} 29 \u{0441}\u{0435}\u{043a}",
+        ]);
+        $this->assertDatabaseHas('messages', [
+            'channels_id' => $channel->id,
+            'type' => 'system',
+            'message' => 'EgoOne '."\u{043f}\u{0440}\u{043e}\u{0434}\u{043e}\u{043b}\u{0436}\u{0430}\u{0435}\u{0442} \u{0437}\u{0432}\u{043e}\u{043d}\u{043e}\u{043a}",
+        ]);
+    }
+
     public function test_heartbeat_reports_superseded_when_another_device_active(): void
     {
         $channel = $this->makeChannel();
@@ -501,6 +557,29 @@ class CallServiceTest extends TestCase
         $this->travel(CallService::UNDERSTAFFED_TTL_SECONDS + 5)->seconds();
         $this->assertSame(1, $this->service->reapStaleCalls());
         $this->assertSame(CallStatus::Ended, $call->fresh()->status);
+    }
+
+    /** Сессия, записанная heartbeat-ом после завершения звонка (гонка с выходом), убирается командой уборки. */
+    public function test_reaper_removes_stale_sessions_of_ended_calls(): void
+    {
+        $channel = $this->makeChannel();
+        $user = $this->makeUser();
+        $this->addMember($channel, $user);
+        $this->service->create($user, $channel->id);
+        $call = Call::query()->where('channel_id', $channel->id)->active()->firstOrFail();
+        $call->update(['status' => CallStatus::Ended]);
+
+        CallSession::query()->where('call_id', $call->call_id)->delete();
+        CallSession::create(['call_id' => $call->call_id, 'session_id' => 'orphan', 'user_id' => $user->id,
+            'channel_id' => $channel->id, 'last_seen_at' => now()->subSeconds(CallSession::STALE_SECONDS + 10)]);
+        CallSession::create(['call_id' => $call->call_id, 'session_id' => 'fresh', 'user_id' => $user->id,
+            'channel_id' => $channel->id, 'last_seen_at' => now()]);
+
+        $this->artisan('calls:reap-stale')->assertSuccessful();
+
+        $this->assertDatabaseMissing('call_sessions', ['session_id' => 'orphan']);
+        // Свежую не трогаем: по ней звонок ещё может восстановиться (restoreRecentlyEndedCall).
+        $this->assertDatabaseHas('call_sessions', ['session_id' => 'fresh']);
     }
 
     /** @return array{0: Channel, 1: User, 2: User} */

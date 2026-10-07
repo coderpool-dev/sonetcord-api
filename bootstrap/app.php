@@ -4,6 +4,7 @@ use App\Http\Middleware\EnsureEmailIsVerifiedForApi;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\ForceJsonResponse;
 use App\Http\Middleware\RestrictDemoGuest;
+use App\Http\Middleware\ValidateSmartCaptcha;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -11,6 +12,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\HandleCors;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -24,12 +26,13 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->prepend(HandleCors::class);
-        // За nginx/Cloudflare без этого request()->ip() всегда 127.0.0.1.
-        $middleware->trustProxies(at: '*');
+        // nginx передаёт PHP реальный адрес через REMOTE_ADDR (real_ip module).
+        // X-Forwarded-For от клиента не доверяем: иначе лимиты обходятся подменой заголовка.
         $middleware->alias([
             'admin' => EnsureUserIsAdmin::class,
             'verified.email' => EnsureEmailIsVerifiedForApi::class,
             'demo.restrict' => RestrictDemoGuest::class,
+            'captcha' => ValidateSmartCaptcha::class,
         ]);
         // Роута login нет: гостю отвечаем 401, а не редиректом. Задаётся именно здесь,
         // иначе Laravel после этого колбэка поставит редирект на route('login').
@@ -37,13 +40,23 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(prepend: [ForceJsonResponse::class]);
     })
     ->withSchedule(function (Schedule $schedule): void {
+        // Частые задачи выполняются внутри процесса schedule:run: command() запускал бы на каждую
+        // отдельный PHP с загрузкой Laravel с нуля — три загрузки в минуту вместо одной.
+        // Ненулевой код команды — исключение: иначе планировщик считал бы упавшую задачу успешной.
+        $inProcess = fn (string $command) => $schedule->call(function () use ($command): void {
+            $exitCode = Artisan::call($command);
+            if ($exitCode !== 0) {
+                throw new RuntimeException("Scheduled command {$command} exited with code {$exitCode}");
+            }
+        })->name($command);
+
         // Ретеншн истории и чистка брошенных загрузок (срок — uploads.retention_days).
         $schedule->command('attachments:prune')->dailyAt('04:00');
-        $schedule->command('calls:reap-stale')->everyMinute()->withoutOverlapping();
+        $inProcess('calls:reap-stale')->everyMinute()->withoutOverlapping();
         // Десктоп мог закрыться, не сообщив о конце игры: такие сессии закрываем по TTL статуса.
-        $schedule->command('activity:close-abandoned-games')->everyMinute()->withoutOverlapping();
-        $schedule->command('users:prune-unverified')->everyFiveMinutes()->withoutOverlapping();
-        $schedule->command('demo:prune')->everyFifteenMinutes()->withoutOverlapping();
+        $inProcess('activity:close-abandoned-games')->everyMinute()->withoutOverlapping();
+        $inProcess('users:prune-unverified')->everyFiveMinutes()->withoutOverlapping();
+        $inProcess('demo:prune')->everyFifteenMinutes()->withoutOverlapping();
         // Sanctum не удаляет просроченные токены сам — без чистки они висят в «Сессиях».
         $schedule->command('tokens:prune-expired')->dailyAt('04:10');
     })

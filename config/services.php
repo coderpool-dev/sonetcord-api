@@ -2,6 +2,18 @@
 
 return [
 
+    'smartcaptcha' => [
+        'server_key' => env('YANDEX_SMARTCAPTCHA_SERVER_KEY'),
+        'validate_url' => env('YANDEX_SMARTCAPTCHA_VALIDATE_URL', 'https://smartcaptcha.cloud.yandex.ru/validate'),
+    ],
+
+    // Звонить можно только из сборок фронта, которые присылают client_build (см. App\Support\ClientBuild).
+    'client_build' => [
+        'required' => (bool) env('CLIENT_BUILD_REQUIRED', true),
+        // Время сборки (NEXT_PUBLIC_BUILD_TIME), раньше которой звонить нельзя; пусто — любая.
+        'min' => env('CLIENT_MIN_BUILD'),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Third Party Services
@@ -57,6 +69,13 @@ return [
     // Web Push (VAPID). Ключи: `php artisan push:vapid` → VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY в .env.
     // Без ключей пуши просто не отправляются (PushNotificationService::isConfigured).
     'webpush' => [
+        'queue_connection' => env('WEBPUSH_QUEUE_CONNECTION', 'database'),
+        'allowed_hosts' => [
+            'fcm.googleapis.com',
+            'updates.push.services.mozilla.com',
+            '*.push.apple.com',
+            '*.notify.windows.com',
+        ],
         'public_key' => env('VAPID_PUBLIC_KEY'),
         'private_key' => env('VAPID_PRIVATE_KEY'),
         'subject' => env('VAPID_SUBJECT', 'https://sonetcord.ru'),

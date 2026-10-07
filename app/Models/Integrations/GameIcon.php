@@ -10,6 +10,8 @@ use Illuminate\Support\Str;
 
 class GameIcon extends Model
 {
+    protected $table = 'game_icons';
+
     /** Приоритет источника иконки: чем выше, тем «настоящее» арт игры. */
     public const SOURCE_PRIORITY = [
         'folder' => 3,
@@ -74,6 +76,14 @@ class GameIcon extends Model
             return null;
         }
 
-        return self::query()->whereIn('slug', $slugs)->first();
+        $exact = self::query()->whereIn('slug', $slugs)->first();
+        if ($exact) {
+            return $exact;
+        }
+
+        // Иконка могла прийти под именем из exe («TheLongDark») — сравниваем без пробелов и знаков.
+        $keys = array_map(Game::compactKey(...), [$raw, (string) $canonical]);
+
+        return self::query()->get()->first(fn (self $icon) => in_array(Game::compactKey($icon->slug), $keys, true));
     }
 }

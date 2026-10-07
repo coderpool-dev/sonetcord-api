@@ -33,6 +33,20 @@ class ImageCompressor
      */
     public function compress(string $binary): array
     {
+        // GD cannot decode animated WebP. Preserve it just as we preserve GIF.
+        if (strlen($binary) >= 30 && substr($binary, 0, 4) === 'RIFF'
+            && substr($binary, 8, 8) === 'WEBPVP8X' && (ord($binary[20]) & 0x02) !== 0) {
+            $size = @getimagesizefromstring($binary);
+            if ($size === false) {
+                throw new RuntimeException('Не удалось прочитать изображение');
+            }
+
+            return [
+                'binary' => $binary, 'ext' => 'webp', 'mime' => 'image/webp',
+                'width' => (int) $size[0], 'height' => (int) $size[1],
+            ];
+        }
+
         $image = @imagecreatefromstring($binary);
 
         if ($image === false) {

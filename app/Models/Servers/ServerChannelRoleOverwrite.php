@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /** Discord-style allow/deny переопределение прав роли на конкретном канале. */
 class ServerChannelRoleOverwrite extends Model
 {
+    protected $table = 'server_channel_role_overwrites';
+
     protected $fillable = ['server_channel_id', 'server_role_id', 'allow', 'deny'];
 
     protected $casts = [

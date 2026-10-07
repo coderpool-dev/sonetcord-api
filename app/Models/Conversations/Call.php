@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
 
 /**
@@ -19,6 +20,8 @@ use Illuminate\Support\Collection;
 class Call extends Model
 {
     use HasFactory;
+
+    protected $table = 'calls';
 
     protected $primaryKey = 'call_id';
 
@@ -35,13 +38,40 @@ class Call extends Model
         'answered',
         'system_message_id',
         'understaffed_at',
+        'ended_at',
     ];
 
     protected $casts = [
         'status' => CallStatus::class,
         'answered' => 'boolean',
         'understaffed_at' => 'datetime',
+        'ended_at' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $call): void {
+            if ($call->status === CallStatus::Ended && $call->ended_at === null) {
+                $call->ended_at = now();
+            } elseif ($call->status === CallStatus::Active && $call->ended_at !== null) {
+                $call->ended_at = null;
+            }
+        });
+    }
+
+    /** Сколько шёл звонок: до конца или до сейчас, если ещё идёт. */
+    public function durationSeconds(): int
+    {
+        $startedAt = $this->created_at ?? now();
+
+        return max(0, (int) $startedAt->diffInSeconds($this->ended_at ?? now()));
+    }
+
+    /** @return HasMany<CallAttendance, $this> */
+    public function attendances(): HasMany
+    {
+        return $this->hasMany(CallAttendance::class, 'call_id', 'call_id');
+    }
 
     /** Последний активный звонок в канале. */
     public static function activeIn(int $channelId): ?self

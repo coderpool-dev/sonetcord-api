@@ -6,16 +6,12 @@ use App\Enums\ServerChannelKind;
 use App\Enums\ServerPermission;
 use App\Models\Servers\ServerChannel;
 use App\Models\User;
-use App\Services\Servers\ServerChannelPermissionResolver;
-use App\Services\Servers\ServerService;
+use App\Services\Servers\ServerChannelAccess;
 use Illuminate\Auth\Access\Response;
 
 class ServerChannelPolicy
 {
-    public function __construct(
-        private readonly ServerService $servers,
-        private readonly ServerChannelPermissionResolver $resolver,
-    ) {}
+    public function __construct(private readonly ServerChannelAccess $access) {}
 
     public function view(User $user, ServerChannel $channel): Response
     {
@@ -38,18 +34,8 @@ class ServerChannelPolicy
 
     private function allowChannelPermission(User $user, ServerChannel $channel, int $permission): Response
     {
-        if ($this->servers->isOwner((int) $user->id, (int) $channel->server_id)) {
-            return Response::allow();
-        }
+        $denial = $this->access->for($user, $channel)->denial($permission);
 
-        $member = $this->servers->activeMembershipWithRoles((int) $user->id, (int) $channel->server_id);
-
-        if (! $member) {
-            return Response::deny('Нет доступа');
-        }
-
-        return ServerPermission::has($this->resolver->effectivePermissions($member, $channel), $permission)
-            ? Response::allow()
-            : Response::deny('Нет прав');
+        return $denial === null ? Response::allow() : Response::deny($denial);
     }
 }

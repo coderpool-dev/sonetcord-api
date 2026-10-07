@@ -10,19 +10,14 @@ return new class extends Migration
     {
         Schema::create('channels_members', function (Blueprint $table) {
             $table->id();
+
             $table->unsignedBigInteger('users_id');
             $table->unsignedBigInteger('channels_id');
-            $table->tinyInteger('status')->default(1)->comment('0=вышел, 1=участник, 2=админ');
-            $table->tinyInteger('call_status')->default(0)->comment('0=нет, 1=ringing, 2=joined, 3=declined');
-            $table->timestamp('last_call_seen')->nullable();
-            $table->timestamps();
+            $table->string('status');
 
-            $table->index(['channels_id', 'users_id']);
-            $table->index(['channels_id', 'call_status']);
-            $table->index('status');
-            $table->unique(['channels_id', 'users_id']);
-            $table->foreign('users_id')->references('id')->on('users')->cascadeOnDelete();
-            $table->foreign('channels_id')->references('id')->on('channels')->cascadeOnDelete();
+
+            $table->foreign('users_id')->references('id')->on('users');
+            $table->foreign('channels_id')->references('id')->on('channels');
         });
     }
 

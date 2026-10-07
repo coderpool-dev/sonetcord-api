@@ -7,8 +7,22 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Game extends Model
 {
+    protected $table = 'games';
+
     /** slug => canonical display name for legacy / process-style names. null = не игра. */
     private const DISPLAY_ALIASES = [
+        'project_highschool' => 'Agefield High: Rock the School',
+        'project highschool' => 'Agefield High: Rock the School',
+        'project_highschool-win64-shipping' => 'Agefield High: Rock the School',
+        'pendriverpro' => 'Pacific Drive',
+        'pendriverpro-win64-shipping' => 'Pacific Drive',
+        'b1' => 'Black Myth: Wukong',
+        'b1-win64-shipping' => 'Black Myth: Wukong',
+        'helldiverst 2' => 'Helldivers 2',
+        'helldivers™ 2' => 'Helldivers 2',
+        'security51' => 'Security 51',
+        'dead island - definitive edition' => 'Dead Island Definitive Edition',
+        'gpu drivers are out of date' => null,
         'abinfinite' => 'Arena Breakout: Infinite',
         'ab infinite' => 'Arena Breakout: Infinite',
         'arena breakout infinite' => 'Arena Breakout: Infinite',
@@ -25,6 +39,9 @@ class Game extends Model
         'minecraft 1.12.2' => 'Minecraft',
         'minecraft* 1.20.1' => 'Minecraft',
         'minecraft* forge 1.20.1' => 'Minecraft',
+        // После срезания номера версии: «Minecraft* 1.21.1» → «Minecraft*».
+        'minecraft*' => 'Minecraft',
+        'minecraft* forge' => 'Minecraft',
         'subnautica2' => 'Subnautica 2',
         'subnautica 2 0.1.2.2-128456' => 'Subnautica 2',
         'stalker2' => 'S.T.A.L.K.E.R. 2: Heart of Chornobyl',
@@ -48,6 +65,14 @@ class Game extends Model
         'yuanshen' => 'Genshin Impact',
         'yuan shen' => 'Genshin Impact',
         '原神' => 'Genshin Impact',
+        'pubg' => 'PUBG: BATTLEGROUNDS',
+        'tslgame' => 'PUBG: BATTLEGROUNDS',
+        // Внутренние имена exe: BBQ-Win64-Shipping / KZ — The First Berserker: Khazan.
+        'bbq' => 'The First Berserker: Khazan',
+        'kz' => 'The First Berserker: Khazan',
+        'goatsim ue4' => 'Goat Simulator: Remastered',
+        'goatsim_ue4' => 'Goat Simulator: Remastered',
+        'compile error' => null,
         'goydacord' => null,
         'goida cord' => null,
         'epic online services' => null,
@@ -79,6 +104,8 @@ class Game extends Model
         'renderer to use',
         'no compatible gpu',
         'untitled',
+        // Оверлей Epic Online Services (EOSOverlayRenderer-Win64-Shipping) рядом с играми из EGS.
+        'eosoverlay',
     ];
 
     protected $fillable = [
@@ -129,12 +156,9 @@ class Game extends Model
             throw new \InvalidArgumentException('Invalid game name');
         }
 
-        $slug = self::slugFromName($normalized);
-
-        $game = self::query()->firstOrCreate(
-            ['slug' => $slug],
-            ['name' => $normalized],
-        );
+        $game = self::query()->where('slug', self::slugFromName($normalized))->first()
+            ?? self::findByCompactName($normalized)
+            ?? self::query()->create(['slug' => self::slugFromName($normalized), 'name' => $normalized]);
 
         if (self::isBetterDisplayName($normalized, $game->name)) {
             $game->update(['name' => $normalized]);
@@ -143,10 +167,29 @@ class Game extends Model
         return $game->fresh();
     }
 
+    /**
+     * Ключ для сравнения без пробелов, регистра и знаков: «EscapeFromTarkov» и «Escape from Tarkov»,
+     * «Thequarry» и «The Quarry» — одна игра, просто одно имя пришло из exe, другое из заголовка окна.
+     */
+    public static function compactKey(string $name): string
+    {
+        return (string) preg_replace('/[^\p{L}\p{N}]+/u', '', mb_strtolower($name));
+    }
+
+    /** Таблица игр маленькая (десятки строк), поэтому ищем прямым перебором. */
+    private static function findByCompactName(string $name): ?self
+    {
+        $key = self::compactKey($name);
+
+        return $key === '' ? null : self::query()->get()->first(fn (self $game) => self::compactKey($game->name) === $key);
+    }
+
     private static function canonicalizeName(string $gameName): string
     {
         $normalized = preg_replace('/\s+/u', ' ', trim($gameName)) ?? '';
         $normalized = preg_replace('/\s*\((?:inactive|disabled|неактивно|paused)\)\s*$/iu', '', $normalized) ?? $normalized;
+        // Номер сборки в заголовке окна: «Subnautica 2 0.1.2.2-128456», «Minecraft 1.20.1».
+        $normalized = preg_replace('/\s+v?\d+(?:\.\d+){2,}(?:[-+][\w.]+)?$/u', '', $normalized) ?? $normalized;
         $normalized = trim($normalized);
 
         if (self::looksLikeBlender($normalized)) {

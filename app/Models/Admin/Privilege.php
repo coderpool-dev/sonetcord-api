@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Privilege extends Model
 {
+    protected $table = 'privileges';
+
     public const ADMIN = 'admin';
 
     protected $fillable = ['name'];

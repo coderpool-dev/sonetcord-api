@@ -9,6 +9,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 /** @property int $permissions битовая маска App\Enums\ServerPermission */
 class ServerRole extends Model
 {
+    protected $table = 'server_roles';
+
     protected $fillable = ['server_id', 'name', 'color', 'position', 'permissions', 'is_default', 'hoist', 'mentionable'];
 
     protected $casts = [

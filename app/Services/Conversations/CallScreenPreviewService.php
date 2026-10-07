@@ -38,7 +38,8 @@ class CallScreenPreviewService
     }
 
     /** То же самое, но для голосового канала сервера — зеркало storeFrame(). */
-    public function storeFrameForServerChannel(User $user, int $serverChannelId, string $jpeg): void
+    /** $ttlSeconds длиннее обычного — для демо-стрима, у которого кадр не обновляется. */
+    public function storeFrameForServerChannel(User $user, int $serverChannelId, string $jpeg, int $ttlSeconds = self::TTL_SECONDS): void
     {
         $call = Call::activeInServerChannel($serverChannelId);
 
@@ -46,8 +47,8 @@ class CallScreenPreviewService
             throw new ApiException('Демонстрация экрана не запущена', 409);
         }
 
-        Cache::put($this->frameCacheKey($call->call_id, (int) $user->id), base64_encode($jpeg), self::TTL_SECONDS);
-        Cache::put($this->frameTimeCacheKey($call->call_id, (int) $user->id), now()->timestamp, self::TTL_SECONDS);
+        Cache::put($this->frameCacheKey($call->call_id, (int) $user->id), base64_encode($jpeg), $ttlSeconds);
+        Cache::put($this->frameTimeCacheKey($call->call_id, (int) $user->id), now()->timestamp, $ttlSeconds);
     }
 
     /** То же самое, но для голосового канала сервера — зеркало latestFrame(). */

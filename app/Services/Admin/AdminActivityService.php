@@ -2,23 +2,27 @@
 
 namespace App\Services\Admin;
 
+use App\Enums\CallStatus;
 use App\Enums\ChannelType;
 use App\Enums\MemberCallStatus;
 use App\Enums\MembershipStatus;
 use App\Models\Conversations\Call;
+use App\Models\Conversations\CallAttendance;
 use App\Models\Conversations\CallSession;
 use App\Models\Conversations\Channel;
 use App\Models\Conversations\ChannelMember;
 use App\Models\Conversations\Message;
+use App\Models\Servers\ServerChannel;
 use App\Models\Support\FeedbackMessage;
 use App\Models\Support\SupportThread;
 use App\Models\Support\UserReport;
 use App\Models\User;
 use App\Services\Presence\SitePresenceService;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 
-/** Живая картина для админки: кто в сети, какие идут звонки, кто сейчас на сайте. */
+/** Живая картина для админки: кто в сети, какие идут звонки, кто сейчас на сайте, и история звонков. */
 class AdminActivityService
 {
     public function __construct(private readonly SitePresenceService $sitePresence) {}
@@ -88,11 +92,14 @@ class AdminActivityService
         $calls = Call::query()
             ->whereIn('call_id', $freshSessions->pluck('call_id')->unique())
             ->active()
-            ->with(['channel', 'initiator:id,login,name,avatar,updated_at'])
+            ->with(['channel', 'serverChannel.server:id,name', 'initiator:id,login,name,avatar,updated_at'])
             ->get()
             ->keyBy('call_id');
 
+        // Только настоящие люди: демо-друзья «стримят» в сервере каждого демо-гостя, и без
+        // фильтра админка была забита фальшивыми звонками. Звонок без живых участников пропускается.
         $users = User::query()
+            ->real()
             ->whereIn('id', $freshSessions->pluck('user_id')->unique())
             ->get(['id', 'login', 'name', 'avatar', 'presence', 'updated_at'])
             ->keyBy('id');
@@ -112,6 +119,80 @@ class AdminActivityService
             ->sortByDesc('duration_seconds')
             ->values()
             ->all();
+    }
+
+    /**
+     * Закончившиеся звонки, новые сверху. Звонки демо-аккаунтов не показываются, как и в живом списке.
+     * Участников запоминают с 2026-10-05 — у старых звонков список пуст.
+     *
+     * @return array{calls: list<array<string, mixed>>, page: int, has_more: bool}
+     */
+    public function callHistory(int $page = 1, int $perPage = 30): array
+    {
+        $page = max(1, $page);
+        $calls = Call::query()
+            ->where('status', CallStatus::Ended)
+            ->whereIn('initiator_id', User::query()->real()->select('id'))
+            ->with([
+                'channel',
+                'serverChannel.server:id,name',
+                'initiator:id,login,name,avatar,updated_at',
+                'attendances' => fn ($query) => $query->whereIn('user_id', User::query()->real()->select('id'))->orderBy('joined_at'),
+                'attendances.user:id,login,name,avatar,presence,last_online,updated_at',
+            ])
+            ->orderByDesc('created_at')
+            ->forPage($page, $perPage + 1)
+            ->get();
+
+        $hasMore = $calls->count() > $perPage;
+        $calls = $calls->take($perPage);
+        $membersByChannel = $this->loadChannelMembers($calls->pluck('channel_id')->filter()->unique());
+
+        return [
+            'calls' => $calls->map(fn (Call $call) => $this->serializeHistoryCall($call, $membersByChannel))->values()->all(),
+            'page' => $page,
+            'has_more' => $hasMore,
+        ];
+    }
+
+    /** @param  Collection<array-key, EloquentCollection<int, ChannelMember>>  $membersByChannel */
+    private function serializeHistoryCall(Call $call, Collection $membersByChannel): array
+    {
+        $endedAt = $call->ended_at ?? $call->updated_at;
+
+        return [
+            'call_id' => (string) $call->call_id,
+            'started_at' => $call->created_at?->toIso8601String(),
+            'ended_at' => $endedAt?->toIso8601String(),
+            'duration_seconds' => $call->durationSeconds(),
+            // В голосовой канал сервера не дозваниваются — «пропущенным» бывает только звонок в чате.
+            'missed' => $call->server_channel_id === null && ! $call->answered,
+            'initiator' => $call->initiator ? $this->serializeUser($call->initiator) : null,
+            'channel' => $call->server_channel_id
+                ? $this->serializeServerChannel($call->serverChannel, (int) $call->server_channel_id)
+                : $this->serializeChannel($call->channel, $membersByChannel->get((int) $call->channel_id) ?? collect()),
+            'participants' => $call->attendances
+                ->filter(fn (CallAttendance $attendance) => $attendance->user !== null)
+                ->map(fn (CallAttendance $attendance) => [
+                    ...$this->serializeUser($attendance->user),
+                    'joined_at' => $attendance->joined_at?->toIso8601String(),
+                    'seconds' => $this->attendanceSeconds($attendance, $endedAt),
+                ])
+                ->values()
+                ->all(),
+        ];
+    }
+
+    /** Время в звонке: от входа до последнего heartbeat, но не дольше самого звонка. */
+    private function attendanceSeconds(CallAttendance $attendance, ?CarbonInterface $callEndedAt): ?int
+    {
+        if (! $attendance->joined_at || ! $attendance->last_seen_at) {
+            return null;
+        }
+
+        $leftAt = $callEndedAt && $attendance->last_seen_at->gt($callEndedAt) ? $callEndedAt : $attendance->last_seen_at;
+
+        return max(0, (int) $attendance->joined_at->diffInSeconds($leftAt));
     }
 
     /**
@@ -145,8 +226,29 @@ class AdminActivityService
             'started_at' => $startedAt->toIso8601String(),
             'duration_seconds' => max(0, (int) $startedAt->diffInSeconds(now())),
             'initiator' => $call->initiator ? $this->serializeUser($call->initiator) : null,
-            'channel' => $this->serializeChannel($call->channel, $channelMembers),
+            'channel' => $call->server_channel_id
+                ? $this->serializeServerChannel($call->serverChannel, (int) $call->server_channel_id)
+                : $this->serializeChannel($call->channel, $channelMembers),
             'participants' => $participants,
+        ];
+    }
+
+    /** Голосовой канал сервера: своего чата у звонка нет, подписываем сервером и каналом. */
+    private function serializeServerChannel(?ServerChannel $channel, int $serverChannelId): array
+    {
+        $serverName = trim((string) $channel?->server?->name);
+        $channelName = trim((string) $channel?->name);
+        // Решётку в начале названия люди ставят и сами (канал «#1») — не удваиваем её.
+        $label = $channelName !== '' ? '#'.ltrim($channelName, '#') : 'Канал #'.$serverChannelId;
+
+        return [
+            'id' => $serverChannelId,
+            'type' => 'server',
+            'name' => $channelName !== '' ? $channelName : null,
+            'display_name' => $serverName !== '' ? $serverName.' · '.$label : $label,
+            'avatar' => null,
+            'member_count' => 0,
+            'members' => [],
         ];
     }
 

@@ -19,6 +19,8 @@ class Channel extends Model
 {
     use HasFactory;
 
+    protected $table = 'channels';
+
     public $timestamps = false;
 
     protected $fillable = [

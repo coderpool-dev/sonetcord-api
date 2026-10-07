@@ -65,27 +65,24 @@ class GameIconService
             throw ValidationException::withMessages(['name' => ['Некорректное название игры']]);
         }
 
-        $existing = GameIcon::query()->where('slug', $slug)->first();
+        // Иконка у игры уже есть — новую не принимаем: десктоп каждого игрока присылал свою
+        // (из Steam, из exe), и админке копились заявки на игры, у которых всё в порядке.
+        $existing = GameIcon::findByName($canonicalName);
+        if ($existing && $this->iconFileExists($existing)) {
+            return ['icon' => $this->iconPayload($existing), 'exists' => true, 'pending' => false];
+        }
 
         if (! $file->isValid()) {
             throw new RuntimeException('Файл иконки повреждён');
         }
 
-        $hash = hash_file('sha256', $file->getRealPath());
-        if ($existing && $this->iconFileExists($existing) && hash_equals((string) $existing->icon_hash, $hash)) {
-            return ['icon' => $this->iconPayload($existing), 'exists' => true, 'pending' => false];
+        // Одна заявка на игру: пока её не рассмотрели, другие игроки новую не создают.
+        $pending = GameIconSubmission::query()->where('slug', $slug)->where('status', 'pending')->first();
+        if ($pending) {
+            return ['icon' => null, 'exists' => false, 'pending' => true, 'submission_id' => $pending->id];
         }
 
-        $pending = GameIconSubmission::query()
-            ->where('uploaded_by', $user->id)->where('slug', $slug)->where('status', 'pending')->first();
-        if ($pending) {
-            return [
-                'icon' => $existing && $this->iconFileExists($existing) ? $this->iconPayload($existing) : null,
-                'exists' => $existing !== null && $this->iconFileExists($existing),
-                'pending' => true,
-                'submission_id' => $pending->id,
-            ];
-        }
+        $hash = hash_file('sha256', $file->getRealPath());
 
         if (GameIconSubmission::query()->where('uploaded_by', $user->id)->where('status', 'pending')->count() >= 20) {
             throw ValidationException::withMessages(['icon' => ['У вас слишком много заявок на проверке']]);
@@ -117,12 +114,7 @@ class GameIconService
             throw $exception;
         }
 
-        return [
-            'icon' => $existing && $this->iconFileExists($existing) ? $this->iconPayload($existing) : null,
-            'exists' => $existing !== null && $this->iconFileExists($existing),
-            'pending' => true,
-            'submission_id' => $submission->id,
-        ];
+        return ['icon' => null, 'exists' => false, 'pending' => true, 'submission_id' => $submission->id];
     }
 
     public function approve(GameIconSubmission $submission, User $reviewer, int $priority): GameIcon

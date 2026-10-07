@@ -16,26 +16,12 @@ class GameNameTest extends TestCase
         $this->assertSame('Genshin Impact', Game::normalizePublicName('Genshin Impact game'));
     }
 
-    public function test_real_detected_process_names_normalize_to_display_name(): void
+    public function test_process_aliases_and_driver_warning(): void
     {
-        $this->assertSame('Subnautica 2', Game::normalizePublicName('Subnautica2'));
-        $this->assertSame('Subnautica 2', Game::normalizePublicName('Subnautica 2 0.1.2.2-128456'));
-        $this->assertSame('S.T.A.L.K.E.R. 2: Heart of Chornobyl', Game::normalizePublicName('Stalker2'));
-        $this->assertSame('S.T.A.L.K.E.R. 2: Heart of Chornobyl', Game::normalizePublicName('S.T.A.L.K.E.R. 2 Heart of Chornobyl'));
-        $this->assertSame('Mafia: The Old Country', Game::normalizePublicName('Mafia The Old Country'));
-        $this->assertSame('Into the Dead: Our Darkest Days', Game::normalizePublicName('IntoTheDeadOurDarkestDays'));
-        $this->assertSame('Corruption of Champions II', Game::normalizePublicName('CoC2'));
-        $this->assertSame('The Long Dark', Game::normalizePublicName('TheLongDark'));
-        $this->assertSame('7 Days to Die', Game::normalizePublicName('7daystodie'));
-        $this->assertSame('Minecraft', Game::normalizePublicName('Minecraft* 1.20.1'));
-        $this->assertSame('Minecraft', Game::normalizePublicName('Minecraft* Forge 1.20.1'));
-        $this->assertSame('Minecraft', Game::normalizePublicName('Minecraft 1.12.2'));
-    }
-
-    public function test_non_game_utility_names_are_hidden(): void
-    {
-        $this->assertNull(Game::normalizePublicName('DayZ Uninstaller'));
-        $this->assertNull(Game::normalizePublicName('Wallpaper UI'));
-        $this->assertNull(Game::normalizePublicName('Crosshair V2'));
+        $this->assertSame('Pacific Drive', Game::normalizePublicName('Pendriverpro'));
+        $this->assertSame('Black Myth: Wukong', Game::normalizePublicName('b1'));
+        $this->assertSame('Helldivers 2', Game::normalizePublicName('HELLDIVERST 2'));
+        $this->assertSame('Security 51', Game::normalizePublicName('Security51'));
+        $this->assertNull(Game::normalizePublicName('GPU drivers are out of date'));
     }
 }

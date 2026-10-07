@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ServerBan extends Model
 {
+    protected $table = 'server_bans';
+
     protected $fillable = ['server_id', 'user_id', 'banned_by', 'reason'];
 
     /** @return BelongsTo<Server, $this> */

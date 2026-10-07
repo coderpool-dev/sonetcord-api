@@ -4,14 +4,18 @@ namespace Tests\Feature;
 
 use App\Enums\ChannelType;
 use App\Enums\MemberCallStatus;
+use App\Enums\ServerChannelKind;
 use App\Models\Admin\Privilege;
 use App\Models\Conversations\Call;
 use App\Models\Conversations\CallSession;
+use App\Models\Servers\Server;
+use App\Models\Servers\ServerChannel;
 use App\Models\Support\FeedbackMessage;
 use App\Models\Support\UserReport;
 use App\Models\User;
 use App\Services\Support\SupportThreadService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\Concerns\InteractsWithCalls;
 use Tests\TestCase;
@@ -40,7 +44,8 @@ class AdminApiTest extends TestCase
 
         Sanctum::actingAs($this->makeAdmin());
 
-        $this->getJson('/api/admin/reports?q=рекламу')
+        // Браузер кодирует кириллицу в адресе; сырые байты в query PHP 8.5 разбирает иначе.
+        $this->getJson('/api/admin/reports?'.http_build_query(['q' => 'рекламу']))
             ->assertOk()
             ->assertJsonCount(1, 'reports')
             ->assertJsonPath('reports.0.target.id', $spammer->id)
@@ -152,6 +157,99 @@ class AdminApiTest extends TestCase
         $this->assertSame([$alice->id, $bob->id], array_column($liveCall['participants'], 'id'));
         $this->assertTrue($liveCall['participants'][0]['screen_sharing'], 'С двух устройств берётся последняя сессия');
         $this->assertSame(2, $activity['counts']['participants_in_calls']);
+    }
+
+    public function test_activity_hides_calls_of_demo_accounts(): void
+    {
+        $admin = $this->makeAdmin();
+        $streamer = $this->makeUser();
+        $streamer->forceFill(['demo_kind' => User::DEMO_PERSONA])->save();
+        $call = $this->makeActiveCall($this->makeChannel(), $streamer);
+        $this->joinCall($call, $streamer, 'demo-stream', now()->addHours(25), screenSharing: true);
+        Sanctum::actingAs($admin);
+
+        $activity = $this->getJson('/api/admin/activity')->assertOk()->json('activity');
+
+        $this->assertSame([], $activity['active_calls']);
+        $this->assertSame(0, $activity['counts']['participants_in_calls']);
+
+        // Карточка «Активные звонки» на той же вкладке не должна показывать звонок, которого нет в списке.
+        $this->getJson('/api/admin/stats')->assertOk()
+            ->assertJsonPath('stats.calls_active', 0)
+            ->assertJsonPath('stats.calls_participants_now', 0);
+    }
+
+    public function test_activity_names_server_voice_calls(): void
+    {
+        $admin = $this->makeAdmin();
+        $alice = $this->makeUser(['name' => 'Alice']);
+        $server = Server::create(['name' => 'Тусовка', 'owner_id' => $alice->id]);
+        $voice = ServerChannel::create(['server_id' => $server->id, 'name' => 'Общий', 'kind' => ServerChannelKind::Voice]);
+        $call = Call::create([
+            'call_id' => (string) Str::uuid(),
+            'server_channel_id' => $voice->id,
+            'initiator_id' => $alice->id,
+            'status' => 'active',
+        ]);
+        CallSession::create([
+            'call_id' => $call->call_id,
+            'user_id' => $alice->id,
+            'server_channel_id' => $voice->id,
+            'session_id' => 'alice-web',
+            'last_seen_at' => now(),
+        ]);
+        Sanctum::actingAs($admin);
+
+        $activity = $this->getJson('/api/admin/activity')->assertOk()->json('activity');
+
+        $this->assertCount(1, $activity['active_calls']);
+        $this->assertSame('server', $activity['active_calls'][0]['channel']['type']);
+        $this->assertSame('Тусовка · #Общий', $activity['active_calls'][0]['channel']['display_name']);
+        $this->getJson('/api/admin/stats')->assertOk()->assertJsonPath('stats.calls_active', 1);
+    }
+
+    public function test_call_history_lists_ended_calls_with_duration_and_participants(): void
+    {
+        $admin = $this->makeAdmin();
+        [$alice, $bob] = [$this->makeUser(['name' => 'Alice']), $this->makeUser(['name' => 'Bob'])];
+        $chat = $this->makeChannel(['name' => '', 'status' => ChannelType::Private]);
+        $this->addMember($chat, $alice);
+        $this->addMember($chat, $bob);
+
+        $this->travelTo(now()->subMinutes(10));
+        $call = $this->makeActiveCall($chat, $alice);
+        $call->update(['answered' => true]);
+        $this->joinCall($call, $alice, 'alice-web', now());
+        $this->travel(1)->minutes();
+        $bobSession = CallSession::create([
+            'call_id' => $call->call_id, 'user_id' => $bob->id, 'channel_id' => $chat->id,
+            'session_id' => 'bob-web', 'last_seen_at' => now(),
+        ]);
+        $this->travel(2)->minutes();
+        $bobSession->update(['last_seen_at' => now()]);
+        $this->travel(2)->minutes();
+        $call->update(['status' => 'ended']);
+        // Сессии удаляются при выходе — история от этого не зависит.
+        CallSession::query()->where('call_id', $call->call_id)->delete();
+        $this->travelBack();
+
+        $streamer = $this->makeUser();
+        $streamer->forceFill(['demo_kind' => User::DEMO_PERSONA])->save();
+        $this->makeActiveCall($this->makeChannel(), $streamer, 'ended');
+        $this->makeActiveCall($chat, $alice);
+        Sanctum::actingAs($admin);
+
+        $history = $this->getJson('/api/admin/calls')->assertOk()->json();
+
+        $this->assertCount(1, $history['calls'], 'Без идущего звонка и без звонков демо-аккаунтов');
+        $this->assertFalse($history['has_more']);
+        $entry = $history['calls'][0];
+        $this->assertSame($call->call_id, $entry['call_id']);
+        $this->assertSame(300, $entry['duration_seconds']);
+        $this->assertFalse($entry['missed']);
+        $this->assertSame('Alice ↔ Bob', $entry['channel']['display_name']);
+        $this->assertSame([$alice->id, $bob->id], array_column($entry['participants'], 'id'));
+        $this->assertSame(120, $entry['participants'][1]['seconds']);
     }
 
     private function joinCall(Call $call, User $user, string $sessionId, \DateTimeInterface $lastSeenAt, bool $screenSharing = false): void

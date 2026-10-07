@@ -7,12 +7,15 @@ use App\Models\Presence\GameSession;
 use App\Models\Presence\UserActivityDay;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Database\Eloquent\Collection;
 use InvalidArgumentException;
 
 /** Игровая активность: сессии игр, серии дней подряд и сводка для профиля. */
 class ActivityService
 {
+    public function __construct(private readonly CacheRepository $cache) {}
+
     /**
      * Клиент подтверждает, что игра ещё запущена. Без подтверждения статус
      * скрывается по TTL (см. game_status_text в модели User).
@@ -24,12 +27,19 @@ class ActivityService
         }
     }
 
+    /**
+     * Отмечает день активности. Вызывается на каждый сигнал онлайна (раз в 25 с), поэтому в базу
+     * идём один раз за день на пользователя, дальше ответ знает кэш.
+     */
     public function markActiveDay(User $user, ?Carbon $date = null): void
     {
-        UserActivityDay::firstOrCreate([
-            'user_id' => $user->id,
-            'activity_date' => ($date ?? now())->toDateString(),
-        ]);
+        $day = ($date ?? now())->toDateString();
+
+        if (! $this->cache->add('activity:day:'.$user->id.':'.$day, true, ($date ?? now())->copy()->endOfDay())) {
+            return;
+        }
+
+        UserActivityDay::firstOrCreate(['user_id' => $user->id, 'activity_date' => $day]);
     }
 
     public function recordGameStart(User $user, string $gameName): GameSession

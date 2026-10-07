@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class UserReport extends Model
 {
+    protected $table = 'user_reports';
+
     public const STATUS_NEW = 'new';
 
     public const STATUS_REVIEWED = 'reviewed';

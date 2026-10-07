@@ -98,7 +98,10 @@ class ServerService
         }
 
         if (($removeIcon || $iconFile) && $server->icon) {
-            $this->deleteImage('server-icons', (string) $server->icon);
+            // Иконка demo_* общая для всех демо-серверов — гость меняет только свою ссылку на неё.
+            if (! str_starts_with((string) $server->icon, 'demo_')) {
+                $this->deleteImage('server-icons', (string) $server->icon);
+            }
             $server->icon = null;
         }
 

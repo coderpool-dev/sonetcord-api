@@ -35,15 +35,16 @@ class NormalizeGamesCommand extends Command
                 continue;
             }
 
-            $canonicalSlug = Game::slugFromName($canonicalName);
-            if (! isset($canonicalGroups[$canonicalSlug])) {
-                $canonicalGroups[$canonicalSlug] = ['display' => $canonicalName, 'ids' => []];
+            // Одна группа для «EscapeFromTarkov» и «Escape from Tarkov»: сравниваем без пробелов и знаков.
+            $groupKey = Game::compactKey($canonicalName);
+            if (! isset($canonicalGroups[$groupKey])) {
+                $canonicalGroups[$groupKey] = ['display' => $canonicalName, 'ids' => []];
             }
             // Более «красивое» имя (с двоеточием/пробелами) оставляем как отображаемое.
-            if (Game::isBetterDisplayName($canonicalName, $canonicalGroups[$canonicalSlug]['display'])) {
-                $canonicalGroups[$canonicalSlug]['display'] = $canonicalName;
+            if (Game::isBetterDisplayName($canonicalName, $canonicalGroups[$groupKey]['display'])) {
+                $canonicalGroups[$groupKey]['display'] = $canonicalName;
             }
-            $canonicalGroups[$canonicalSlug]['ids'][] = $game->id;
+            $canonicalGroups[$groupKey]['ids'][] = $game->id;
         }
 
         // 1) Мусор.

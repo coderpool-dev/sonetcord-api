@@ -51,6 +51,28 @@ class PushNotificationTest extends TestCase
         $this->assertSame(0, PushSubscription::query()->count());
     }
 
+    public function test_rejects_untrusted_push_endpoints(): void
+    {
+        Sanctum::actingAs($this->makeUser(), ['*']);
+        foreach (['https://127.0.0.1/push', 'https://10.0.0.1/push', 'https://attacker.example/push',
+            'https://fcm.googleapis.com.attacker.example/push', 'https://fcm.googleapis.com:8443/push',
+            'https://user:pass@fcm.googleapis.com/push'] as $endpoint) {
+            $this->postJson('/api/push/subscriptions', ['endpoint' => $endpoint, 'keys' => ['p256dh' => 'pk', 'auth' => 'au']])
+                ->assertUnprocessable()->assertJsonValidationErrors('endpoint');
+        }
+        $this->assertDatabaseCount('push_subscriptions', 0);
+    }
+
+    public function test_accepts_supported_browser_push_services(): void
+    {
+        Sanctum::actingAs($this->makeUser(), ['*']);
+        foreach (['https://updates.push.services.mozilla.com/wpush/v2/test',
+            'https://web.push.apple.com/test', 'https://wns2.notify.windows.com/test'] as $endpoint) {
+            $this->postJson('/api/push/subscriptions', ['endpoint' => $endpoint, 'keys' => ['p256dh' => 'pk', 'auth' => 'au']])->assertOk();
+        }
+        $this->assertDatabaseCount('push_subscriptions', 3);
+    }
+
     public function test_direct_message_and_incoming_call_push_the_other_member_only(): void
     {
         $alice = $this->makeUser();
@@ -70,7 +92,7 @@ class PushNotificationTest extends TestCase
         $group = $this->makeChannel();
         $this->addMember($group, $alice);
         $this->addMember($group, $bob);
-        $this->postJson("/api/calls/{$group->id}")->assertSuccessful();
+        $this->postJson("/api/calls/{$group->id}", ['client_build' => '2026-10-04T18:00:00.000Z'])->assertSuccessful();
         $call = collect($this->sent)->firstWhere('payload.kind', 'call');
         $this->assertSame([$bob->id], $call['users']);
         $this->assertStringContainsString('звонит вам', $call['payload']['body']);

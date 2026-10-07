@@ -29,14 +29,6 @@ class GeoIpService
     /** IP клиента за Cloudflare и nginx: первый публичный адрес из заголовков, иначе адрес соединения. */
     public function resolveClientIp(Request $request): string
     {
-        foreach ([$request->header('CF-Connecting-IP'), $request->header('X-Real-IP'), $request->ip()] as $ip) {
-            $ip = is_string($ip) ? trim($ip) : '';
-
-            if (! $this->isLocalIp($ip)) {
-                return $ip;
-            }
-        }
-
         return $request->ip() ?: '127.0.0.1';
     }
 
@@ -50,12 +42,6 @@ class GeoIpService
         }
 
         // Внешние сервисы не помогли — страну хотя бы знает Cloudflare.
-        $code = strtoupper((string) $request->header('CF-IPCountry', ''));
-
-        if (preg_match('/^[A-Z]{2}$/', $code) && ! in_array($code, ['XX', 'T1'], true)) {
-            return ['country' => "{$code} ({$code})", 'country_code' => $code, 'city' => null];
-        }
-
         return $lookup;
     }
 

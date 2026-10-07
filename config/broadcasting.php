@@ -15,7 +15,8 @@ return [
     |
     */
 
-    'default' => env('BROADCAST_CONNECTION', 'reverb'),
+    // A fresh checkout must boot before optional Reverb credentials are configured.
+    'default' => env('BROADCAST_CONNECTION', 'log'),
 
     /*
     |--------------------------------------------------------------------------
@@ -48,7 +49,10 @@ return [
                 'useTLS' => env('REVERB_SERVER_BROADCAST_SCHEME', 'http') === 'https',
             ],
             'client_options' => [
-                // Guzzle client options: https://docs.guzzlephp.org/en/stable/request-options.html
+                // Reverb на том же сервере отвечает за миллисекунды. Если он завис, запрос пользователя
+                // ждёт не дольше 3 с, иначе зависание Reverb занимало бы воркеры php-fpm целиком.
+                'connect_timeout' => 1,
+                'timeout' => 3,
             ],
         ],
 

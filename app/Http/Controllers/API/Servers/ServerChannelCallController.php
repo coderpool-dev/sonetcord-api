@@ -56,6 +56,7 @@ class ServerChannelCallController extends Controller
 
     public function heartbeat(CallHeartbeatRequest $request, ServerChannel $serverChannel): JsonResponse
     {
+        // Права, посчитанные политикой, переиспользует и ответ с ограничениями голоса (ServerChannelAccess).
         $this->authorize('call', $serverChannel);
 
         $sessionState = $this->calls->heartbeat(

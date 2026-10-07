@@ -87,6 +87,30 @@ class UploadFlowTest extends TestCase
         $this->assertSame('456789', $response->streamedContent());
     }
 
+    /** На проде большой файл отдаёт nginx: PHP только проверяет доступ и отвечает X-Accel-Redirect. */
+    public function test_large_file_is_handed_to_nginx_when_prefix_is_configured(): void
+    {
+        config(['uploads.encrypt_max_bytes' => 4, 'filesystems.private_x_accel_prefix' => '/_private/']);
+
+        $user = $this->makeUser();
+        $channel = $this->makeChannel();
+        $this->addMember($channel, $user);
+        Sanctum::actingAs($user);
+
+        $content = '0123456789abcdef';
+        $uploadId = $this->initUpload($channel->id, 'clip.bin', strlen($content), 'application/octet-stream');
+        $this->sendChunk($uploadId, 0, $content);
+        $this->postJson("/api/uploads/{$uploadId}/complete", [])->assertCreated();
+
+        $diskPath = Message::where('channels_id', $channel->id)->first()->meta['attachment']['disk_path'];
+        $signedUrl = $this->getJson("/api/messages/{$channel->id}/")->json('data.0.attachment.url');
+
+        $response = $this->get($signedUrl)->assertOk();
+        $this->assertSame('/_private/'.$diskPath, $response->headers->get('X-Accel-Redirect'));
+        $this->assertStringContainsString('clip.bin', (string) $response->headers->get('Content-Disposition'));
+        $this->assertSame('', $response->getContent());
+    }
+
     /** Полный круг (большой нешифрованный): скачанные байты точно совпадают с исходными. */
     public function test_chunked_round_trip_preserves_exact_bytes(): void
     {

@@ -9,6 +9,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ServerInvite extends Model
 {
+    protected $table = 'server_invites';
+
     protected $fillable = [
         'code', 'server_id', 'channel_id', 'created_by', 'max_uses', 'uses', 'expires_at', 'revoked_at',
     ];

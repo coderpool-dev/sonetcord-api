@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Auth\ThrottledSanctumGuard;
 use App\Models\Account\PersonalAccessToken;
 use App\Models\Conversations\Attachment;
 use App\Models\Conversations\Call;
@@ -19,9 +20,12 @@ use App\Policies\ServerChannelPolicy;
 use App\Policies\ServerPolicy;
 use App\Policies\UploadSessionPolicy;
 use App\Policies\UserPolicy;
+use App\Services\Servers\ServerChannelAccess;
+use Illuminate\Auth\RequestGuard;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -41,8 +45,10 @@ class AppServiceProvider extends ServiceProvider
         'forgot-password' => 5,   // каждый запрос отправляет письмо
         'reset-password' => 10,
         'verify-email' => 10,
-        'ping' => 120,
-        'presence' => 120,
+        // Дешёвые и частые: за одним CGNAT (мобильная сеть, общежитие) сидят десятки людей,
+        // при 120/мин семь человек в голосе уже получали 429.
+        'ping' => 600,
+        'presence' => 600,
         'feedback' => 5,
         'game-icons' => 120,
 
@@ -58,6 +64,8 @@ class AppServiceProvider extends ServiceProvider
         // при обычном ICE-restart.
         'webrtc-signal' => 300,
         'call-diagnostics' => 30,
+        'client-diagnostics' => 12,
+        'network-latency' => 20,
         'reports' => 10,
         'link-preview' => 60,
         'mutual-friends' => 120,
@@ -72,7 +80,9 @@ class AppServiceProvider extends ServiceProvider
 
     public function register(): void
     {
-        //
+        // Права в канале запоминаются на один запрос (или одну задачу очереди): политика и сервисы
+        // голоса получают один и тот же расчёт.
+        $this->app->scoped(ServerChannelAccess::class);
     }
 
     public function boot(): void
@@ -80,6 +90,7 @@ class AppServiceProvider extends ServiceProvider
         Model::preventLazyLoading(! $this->app->isProduction());
 
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
+        $this->useThrottledSanctumGuard();
 
         Gate::policy(Attachment::class, AttachmentPolicy::class);
         Gate::policy(Call::class, CallPolicy::class);
@@ -91,6 +102,21 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(User::class, UserPolicy::class);
 
         $this->configureRateLimiting();
+    }
+
+    /**
+     * Тот же guard, что регистрирует SanctumServiceProvider::createGuard, но с ThrottledSanctumGuard.
+     * Наш колбэк Auth::resolved выполняется после пакетного и перекрывает драйвер 'sanctum'.
+     */
+    private function useThrottledSanctumGuard(): void
+    {
+        Auth::resolved(function ($auth): void {
+            $auth->extend('sanctum', fn ($app, $name, array $config) => tap(new RequestGuard(
+                new ThrottledSanctumGuard($auth, config('sanctum.expiration'), $config['provider'], config('sanctum.last_used_at', true)),
+                request(),
+                $auth->createUserProvider($config['provider'] ?? null),
+            ), fn ($guard) => app()->refresh('request', $guard, 'setRequest')));
+        });
     }
 
     private function configureRateLimiting(): void

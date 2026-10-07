@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class UserRecentSticker extends Model
 {
+    protected $table = 'user_recent_stickers';
+
     protected $fillable = [
         'user_id',
         'sticker_id',

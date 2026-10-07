@@ -47,4 +47,19 @@ class RateLimitingTest extends TestCase
 
         $this->postJson('/api/forgot-password', ['email' => 'ghost@example.test'])->assertStatus(429);
     }
+
+    public function test_forged_forwarded_for_cannot_reset_public_rate_limit(): void
+    {
+        $this->withServerVariables(['REMOTE_ADDR' => '8.8.8.8']);
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->withHeaders(['X-Forwarded-For' => "1.2.3.{$i}"])
+                ->postJson('/api/forgot-password', ['email' => 'ghost@example.test'])
+                ->assertOk();
+        }
+
+        $this->withHeaders(['X-Forwarded-For' => '1.2.3.99'])
+            ->postJson('/api/forgot-password', ['email' => 'ghost@example.test'])
+            ->assertStatus(429);
+    }
 }

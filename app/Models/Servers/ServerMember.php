@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class ServerMember extends Model
 {
+    protected $table = 'server_members';
+
     protected $fillable = ['server_id', 'user_id', 'nickname', 'status', 'joined_at', 'voice_muted', 'voice_deafened'];
 
     protected $casts = [

@@ -9,6 +9,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /** Запись журнала аудита сервера — см. App\Services\Servers\ServerAuditLogService. */
 class ServerAuditLog extends Model
 {
+    protected $table = 'server_audit_logs';
+
     public const UPDATED_AT = null;
 
     protected $fillable = ['server_id', 'actor_id', 'action', 'target_type', 'target_id', 'target_label', 'changes'];

@@ -100,6 +100,25 @@ class AuthControllerTest extends TestCase
         $this->postJson('/api/register', $payload)->assertStatus(422);
     }
 
+    public function test_register_accepts_birth_date_before_1970(): void
+    {
+        Notification::fake();
+
+        $this->postJson('/api/register', array_merge($this->validPayload, ['date' => '1954-04-14']))
+            ->assertCreated();
+
+        $this->assertSame('1954-04-14', User::firstWhere('email', 'new@example.test')->date->toDateString());
+    }
+
+    public function test_register_rejects_impossible_birth_date(): void
+    {
+        foreach (['1899-12-31', now()->addDay()->toDateString()] as $date) {
+            $this->postJson('/api/register', array_merge($this->validPayload, ['date' => $date]))
+                ->assertStatus(422)
+                ->assertJsonValidationErrors(['date']);
+        }
+    }
+
     public function test_register_requires_min_password_length(): void
     {
         $payload = array_merge($this->validPayload, [

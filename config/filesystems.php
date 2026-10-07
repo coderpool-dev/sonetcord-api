@@ -77,4 +77,10 @@ return [
         public_path('storage') => storage_path('app/public'),
     ],
 
+    /*
+    | Внутренний location nginx с alias на storage/app/private. Если задан, незашифрованные
+    | вложения отдаёт nginx по X-Accel-Redirect, а не PHP. Пусто — PHP отдаёт файл сам.
+    */
+    'private_x_accel_prefix' => env('PRIVATE_X_ACCEL_PREFIX'),
+
 ];

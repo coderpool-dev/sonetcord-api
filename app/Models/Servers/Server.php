@@ -18,6 +18,8 @@ class Server extends Model
 {
     use HasFactory;
 
+    protected $table = 'servers';
+
     protected $fillable = [
         'name',
         'description',

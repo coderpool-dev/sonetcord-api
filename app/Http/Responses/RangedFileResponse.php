@@ -3,6 +3,7 @@
 namespace App\Http\Responses;
 
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /** Отдача файла с поддержкой Range: перемотка в плеере и докачка. */
@@ -40,6 +41,21 @@ final class RangedFileResponse
 
             fclose($handle);
         }, $status, self::headers($mime, $length, $headers, $status, $start, $end, $total));
+    }
+
+    /**
+     * Файл отдаёт nginx (X-Accel-Redirect на внутренний location), Range он разбирает сам.
+     * Иначе каждая загрузка большого файла держала воркер php-fpm до конца скачивания.
+     */
+    public static function viaNginx(string $prefix, string $diskPath, string $mime, array $headers = []): Response
+    {
+        $uri = rtrim($prefix, '/').'/'.implode('/', array_map('rawurlencode', explode('/', ltrim($diskPath, '/'))));
+
+        return new Response('', 200, [
+            'Content-Type' => $mime,
+            'X-Accel-Redirect' => $uri,
+            ...$headers,
+        ]);
     }
 
     /** Содержимое, уже загруженное в память (например, расшифрованный файл). */

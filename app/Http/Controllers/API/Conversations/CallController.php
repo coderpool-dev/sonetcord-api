@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API\Conversations;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Calls\AcceptCallRequest;
 use App\Http\Requests\Calls\CallHeartbeatRequest;
 use App\Http\Requests\Calls\CallSessionRequest;
 use App\Http\Requests\Calls\StoreScreenPreviewRequest;
@@ -13,6 +14,7 @@ use App\Models\User;
 use App\Services\Conversations\CallPresenceService;
 use App\Services\Conversations\CallScreenPreviewService;
 use App\Services\Conversations\CallService;
+use App\Support\ClientBuild;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -30,6 +32,7 @@ class CallController extends Controller
     public function store(Request $request, Channel $channel): JsonResponse
     {
         $this->authorize('call', $channel);
+        ClientBuild::assertSupported($request);
 
         $start = $this->calls->create($request->user(), (int) $channel->id);
 
@@ -40,11 +43,12 @@ class CallController extends Controller
         );
     }
 
-    public function accept(CallSessionRequest $request, Channel $channel): JsonResponse
+    public function accept(AcceptCallRequest $request, Channel $channel): JsonResponse
     {
         $this->authorize('call', $channel);
+        ClientBuild::assertSupported($request);
 
-        $this->calls->accept($request->user(), (int) $channel->id, $request->sessionId());
+        $this->calls->accept($request->user(), (int) $channel->id, $request->sessionId(), $request->callId());
         $this->logCallDiagnostic('server_accept', $request, $channel);
 
         return $this->successResponse('Вы в звонке');
@@ -79,6 +83,7 @@ class CallController extends Controller
             (int) $channel->id,
             $request->sessionId(),
             $request->boolean('screen_sharing'),
+            $request->callId(),
         );
         $this->logCallDiagnostic('server_heartbeat', $request, $channel);
 

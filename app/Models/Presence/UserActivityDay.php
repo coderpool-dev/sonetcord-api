@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class UserActivityDay extends Model
 {
+    protected $table = 'user_activity_days';
+
     protected $fillable = [
         'user_id',
         'activity_date',

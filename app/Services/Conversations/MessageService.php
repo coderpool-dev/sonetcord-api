@@ -212,20 +212,25 @@ class MessageService
     /** @return bool true — реакция поставлена, false — снята */
     public function toggleReaction(User $user, Message $message, string $emoji): bool
     {
-        $reaction = $message->reactions()
-            ->where('user_id', $user->id)
-            ->where('emoji', $emoji)
-            ->first();
+        $added = DB::transaction(function () use ($user, $message, $emoji): bool {
+            Message::query()->whereKey($message->id)->lockForUpdate()->firstOrFail();
+            $reaction = $message->reactions()
+                ->where('user_id', $user->id)
+                ->where('emoji', $emoji)
+                ->first();
 
-        if ($reaction) {
-            $reaction->delete();
-        } else {
-            $message->reactions()->create(['user_id' => $user->id, 'emoji' => $emoji]);
-        }
+            if ($reaction) {
+                $reaction->delete();
+            } else {
+                $message->reactions()->create(['user_id' => $user->id, 'emoji' => $emoji]);
+            }
+
+            return $reaction === null;
+        }, 3);
 
         $this->broadcastChanged($message, 'reaction');
 
-        return $reaction === null;
+        return $added;
     }
 
     public function recentStickers(User $user): Collection

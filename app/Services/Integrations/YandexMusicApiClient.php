@@ -142,7 +142,7 @@ class YandexMusicApiClient
 
     private function authorizedRequest(string $accessToken): PendingRequest
     {
-        return Http::timeout(8)->withHeaders([
+        return Http::connectTimeout(3)->timeout(4)->withHeaders([
             'Authorization' => 'OAuth '.$accessToken,
             'Accept' => 'application/json',
             'X-Yandex-Music-Client' => 'SonetCord/1.0',

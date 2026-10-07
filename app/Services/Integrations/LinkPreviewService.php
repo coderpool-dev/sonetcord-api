@@ -2,12 +2,19 @@
 
 namespace App\Services\Integrations;
 
+use App\Services\Http\BoundedResponseBody;
+use App\Services\Http\PublicHttpDestination;
+use GuzzleHttp\Handler\CurlHandler;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 class LinkPreviewService
 {
     private const MAX_REDIRECTS = 5;
+
+    private const MAX_BODY_BYTES = 500_000;
+
+    public function __construct(private readonly PublicHttpDestination $destinations) {}
 
     public function preview(string $url): array
     {
@@ -16,16 +23,14 @@ class LinkPreviewService
             throw new \InvalidArgumentException('Некорректная ссылка');
         }
 
-        if (! $this->isPublicUrl($normalized)) {
-            throw new \InvalidArgumentException('Ссылка недоступна для предпросмотра');
-        }
+        $this->destinations->curlOptions($normalized);
 
         $invitePreview = $this->invitePreview($normalized);
         if ($invitePreview !== null) {
             return $invitePreview;
         }
 
-        $cacheKey = 'link_preview:'.sha1($normalized);
+        $cacheKey = 'link_preview:v2:'.sha1($normalized);
 
         return Cache::remember($cacheKey, now()->addHours(6), fn () => $this->fetchPreview($normalized));
     }
@@ -54,67 +59,32 @@ class LinkPreviewService
         return $trimmed;
     }
 
-    private function isPublicUrl(string $url): bool
-    {
-        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
-        if ($host === '' || $host === 'localhost' || str_ends_with($host, '.local')) {
-            return false;
-        }
-
-        if (filter_var($host, FILTER_VALIDATE_IP)) {
-            return $this->isPublicIp($host);
-        }
-
-        $records = @dns_get_record($host, DNS_A + DNS_AAAA);
-        if (! is_array($records) || $records === []) {
-            return false;
-        }
-
-        $ips = [];
-        foreach ($records as $record) {
-            $ip = $record['ip'] ?? $record['ipv6'] ?? null;
-            if (is_string($ip)) {
-                $ips[] = $ip;
-            }
-        }
-
-        if ($ips === []) {
-            return false;
-        }
-
-        foreach ($ips as $ip) {
-            if (! $this->isPublicIp($ip)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private function isPublicIp(string $ip): bool
-    {
-        return filter_var(
-            $ip,
-            FILTER_VALIDATE_IP,
-            FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE,
-        ) !== false;
-    }
-
     private function fetchPreview(string $url): array
     {
         $current = $url;
 
         for ($hop = 0; $hop <= self::MAX_REDIRECTS; $hop++) {
-            if (! $this->isPublicUrl($current)) {
-                throw new \InvalidArgumentException('Ссылка недоступна для предпросмотра');
-            }
+            $curlOptions = $this->destinations->curlOptions($current);
+            $sink = BoundedResponseBody::create(self::MAX_BODY_BYTES);
 
             try {
                 $response = Http::timeout(6)
-                    ->withOptions(['allow_redirects' => false])
+                    ->setHandler(function ($request, array $options) use ($sink) {
+                        // Install the bounded sink at the transport layer, below Laravel middleware.
+                        $options['sink'] = $sink;
+
+                        return (new CurlHandler)($request, $options);
+                    })
+                    ->withOptions([
+                        'allow_redirects' => false,
+                        'proxy' => '',
+                        'curl' => $curlOptions,
+                        'decode_content' => false,
+                    ])
                     ->withHeaders([
                         'User-Agent' => 'SonetCord-LinkPreview/1.0',
                         'Accept' => 'text/html,application/xhtml+xml',
+                        'Accept-Encoding' => 'identity',
                     ])
                     ->get($current);
             } catch (\Throwable) {
@@ -136,13 +106,17 @@ class LinkPreviewService
                 return $this->emptyPreview($url);
             }
 
-            $html = substr((string) $response->body(), 0, 500_000);
+            $body = (string) $response->body();
+            if (strlen($body) > self::MAX_BODY_BYTES || $response->header('Content-Encoding') !== '') {
+                return $this->emptyPreview($url);
+            }
+            $html = $this->normalizeHtml($body, $response->header('Content-Type'));
 
             return [
                 'url' => $url,
                 'title' => $this->metaTagContent($html, ['og:title', 'twitter:title']) ?? $this->titleTagText($html),
                 'description' => $this->metaTagContent($html, ['og:description', 'twitter:description', 'description']),
-                'image' => $this->resolveAbsoluteUrl($url, $this->metaTagContent($html, ['og:image', 'twitter:image'])),
+                'image' => $this->resolveAbsoluteUrl($current, $this->metaTagContent($html, ['og:image', 'twitter:image'])),
                 'site_name' => $this->metaTagContent($html, ['og:site_name']) ?? parse_url($url, PHP_URL_HOST),
             ];
         }
@@ -159,6 +133,29 @@ class LinkPreviewService
             'image' => null,
             'site_name' => parse_url($url, PHP_URL_HOST),
         ];
+    }
+
+    /** External pages may use legacy encodings or contain broken UTF-8. */
+    private function normalizeHtml(string $body, string $contentType): string
+    {
+        $body = substr($body, 0, self::MAX_BODY_BYTES);
+        $charset = null;
+
+        if (preg_match('/charset\s*=\s*["\x27]?([a-zA-Z0-9_-]+)/i', $contentType, $match)) {
+            $charset = $match[1];
+        } elseif (preg_match('/<meta\b[^>]*charset\s*=\s*["\x27]?([a-zA-Z0-9_-]+)/i', substr($body, 0, 8192), $match)) {
+            $charset = $match[1];
+        }
+
+        if ($charset !== null) {
+            try {
+                $body = mb_convert_encoding($body, 'UTF-8', $charset);
+            } catch (\ValueError) {
+                // An unknown charset must not prevent a JSON response.
+            }
+        }
+
+        return mb_scrub($body, 'UTF-8');
     }
 
     /**

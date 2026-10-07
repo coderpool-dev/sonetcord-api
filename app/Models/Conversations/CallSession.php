@@ -22,8 +22,10 @@ class CallSession extends Model
 {
     use HasFactory;
 
+    protected $table = 'call_sessions';
+
     /**
-     * Без heartbeat дольше этого сессия удаляется. Клиент пингует примерно раз в 10 секунд,
+     * Без heartbeat дольше этого сессия удаляется. Клиент пингует примерно раз в 15 секунд,
      * запас переживает короткий рестарт бэка без массового выхода из звонка.
      */
     public const STALE_SECONDS = 120;
@@ -45,6 +47,16 @@ class CallSession extends Model
         'last_seen_at' => 'datetime',
         'screen_sharing' => 'boolean',
     ];
+
+    protected static function booted(): void
+    {
+        // Сессия удаляется при выходе — для истории звонков участник запоминается отдельно.
+        static::saved(function (self $session): void {
+            if ($session->wasRecentlyCreated || $session->wasChanged('last_seen_at')) {
+                CallAttendance::recordFrom($session);
+            }
+        });
+    }
 
     /** @return BelongsTo<Call, $this> */
     public function call(): BelongsTo

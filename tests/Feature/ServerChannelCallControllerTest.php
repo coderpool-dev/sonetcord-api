@@ -3,10 +3,12 @@
 namespace Tests\Feature;
 
 use App\Enums\ServerChannelKind;
+use App\Enums\ServerPermission;
 use App\Events\CallScreenShareStarted;
 use App\Events\CallScreenShareStopped;
 use App\Events\WebRTCSignal;
 use App\Models\Conversations\Call;
+use App\Models\Servers\ServerChannelRoleOverwrite;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Laravel\Sanctum\Sanctum;
@@ -196,5 +198,64 @@ class ServerChannelCallControllerTest extends TestCase
 
             return true;
         });
+    }
+
+    /** Heartbeat проверяет права тем же правилом, что ServerChannelPolicy::call, и отдаёт ограничения голоса. */
+    public function test_voice_heartbeat_checks_access_like_policy(): void
+    {
+        $owner = $this->makeUser();
+        $server = $this->makeServer($owner);
+        $this->addServerMember($server, $owner);
+        $voice = $this->makeServerChannel($server, ['kind' => ServerChannelKind::Voice]);
+
+        $member = $this->makeUser();
+        $membership = $this->addServerMember($server, $member);
+        $stranger = $this->makeUser();
+
+        Sanctum::actingAs($stranger, ['*']);
+        $this->postJson("/api/server-channels/{$voice->id}/calls/heartbeat", ['session_id' => 's-1'])
+            ->assertForbidden()->assertJsonPath('message', 'Нет доступа');
+
+        // Участнику запрещено подключаться к каналу через @everyone.
+        ServerChannelRoleOverwrite::create([
+            'server_channel_id' => $voice->id,
+            'server_role_id' => $membership->fresh()->roles()->first()->id,
+            'allow' => 0,
+            'deny' => ServerPermission::CONNECT_VOICE,
+        ]);
+        Sanctum::actingAs($member, ['*']);
+        $this->postJson("/api/server-channels/{$voice->id}/calls/heartbeat", ['session_id' => 's-2'])
+            ->assertForbidden()->assertJsonPath('message', 'Нет прав');
+
+        // Владелец проходит всегда и получает ограничения голоса в ответе.
+        Sanctum::actingAs($owner, ['*']);
+        $this->postJson("/api/server-channels/{$voice->id}/calls", ['session_id' => 'owner-1'])->assertOk();
+        $this->postJson("/api/server-channels/{$voice->id}/calls/heartbeat", ['session_id' => 'owner-1'])
+            ->assertOk()
+            ->assertJsonPath('active', true)
+            ->assertJsonPath('can_speak', true)
+            ->assertJsonPath('voice_muted', false);
+    }
+
+    /** Вкладка браузера в фоне не шлёт сигнал онлайна, но человек в голосе — он в сети. */
+    public function test_voice_heartbeat_keeps_user_online_without_touching_updated_at(): void
+    {
+        $owner = $this->makeUser();
+        $server = $this->makeServer($owner);
+        $this->addServerMember($server, $owner);
+        $voice = $this->makeServerChannel($server, ['kind' => ServerChannelKind::Voice]);
+
+        Sanctum::actingAs($owner, ['*']);
+        $this->postJson("/api/server-channels/{$voice->id}/calls", ['session_id' => 'owner-1'])->assertOk();
+
+        $owner->forceFill(['last_online' => now()->subMinutes(10)])->saveQuietly();
+        $updatedAt = $owner->fresh()->updated_at;
+
+        $this->travel(3)->seconds();
+        $this->postJson("/api/server-channels/{$voice->id}/calls/heartbeat", ['session_id' => 'owner-1'])->assertOk();
+
+        $owner->refresh();
+        $this->assertTrue($owner->isOnline());
+        $this->assertEquals($updatedAt, $owner->updated_at);
     }
 }

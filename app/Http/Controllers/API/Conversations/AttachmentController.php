@@ -9,7 +9,7 @@ use App\Services\Conversations\AttachmentService;
 use App\Services\Conversations\ChannelService;
 use App\Support\ContentDisposition;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 class AttachmentController extends Controller
 {
@@ -22,7 +22,7 @@ class AttachmentController extends Controller
      * Отдаёт файл вложения. Подпись в адресе (middleware signed) + срок жизни ссылки.
      * user в query — тот, кому выписали ссылку: если его выгнали из беседы, файл больше не отдаём.
      */
-    public function show(Request $request, Message $message): StreamedResponse
+    public function show(Request $request, Message $message): Response
     {
         $viewerId = (int) $request->query('user');
         if ($viewerId < 1 || ! $this->channels->isMember($viewerId, (int) $message->channels_id)) {
@@ -37,8 +37,14 @@ class AttachmentController extends Controller
             'Cache-Control' => 'private, max-age=86400',
         ];
 
-        return $file->encrypted
-            ? RangedFileResponse::fromContents($request, $this->attachments->decryptedContents($file), $file->mime, $headers)
+        if ($file->encrypted) {
+            return RangedFileResponse::fromContents($request, $this->attachments->decryptedContents($file), $file->mime, $headers);
+        }
+
+        $nginxPrefix = config('filesystems.private_x_accel_prefix');
+
+        return $nginxPrefix
+            ? RangedFileResponse::viaNginx($nginxPrefix, $file->diskPath, $file->mime, $headers)
             : RangedFileResponse::fromFile($request, $this->attachments->absolutePath($file), $file->mime, $headers);
     }
 }

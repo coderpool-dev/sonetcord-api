@@ -51,7 +51,7 @@ class DesktopAppPushTest extends TestCase
 
     private function subscribe(int $userId, string $name, string $userAgent): void
     {
-        app(PushNotificationService::class)->subscribe($userId, "https://push.example/{$name}", 'pk', 'au', $userAgent);
+        app(PushNotificationService::class)->subscribe($userId, "https://fcm.googleapis.com/fcm/send/{$name}", 'pk', 'au', $userAgent);
     }
 
     /** @return string[] */
