@@ -20,7 +20,8 @@ class ResolveSitePresenceCountry implements ShouldQueue
         private readonly string $sessionKey,
         private readonly string $ip,
     ) {
-        $this->onConnection('database')->onQueue('background');
+        $connection = config('queue.default');
+        $this->onConnection(in_array($connection, ['sync', 'null'], true) ? 'database' : $connection)->onQueue('background');
     }
 
     public function handle(GeoIpService $geoIp): void

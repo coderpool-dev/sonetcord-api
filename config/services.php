@@ -69,7 +69,7 @@ return [
     // Web Push (VAPID). Ключи: `php artisan push:vapid` → VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY в .env.
     // Без ключей пуши просто не отправляются (PushNotificationService::isConfigured).
     'webpush' => [
-        'queue_connection' => env('WEBPUSH_QUEUE_CONNECTION', 'database'),
+        'queue_connection' => env('WEBPUSH_QUEUE_CONNECTION'),
         'allowed_hosts' => [
             'fcm.googleapis.com',
             'updates.push.services.mozilla.com',
