@@ -122,7 +122,7 @@ class CallServiceTest extends TestCase
         $start = $this->service->create($user, $channel->id);
 
         $this->assertFalse($start->created);
-        $this->assertSame($existing->call_id, $start->call['call_id']);
+        $this->assertSame($existing->call_id, $start->call->callId);
         $this->assertSame(1, Call::where('channel_id', $channel->id)->count());
     }
 

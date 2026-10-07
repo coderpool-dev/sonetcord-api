@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Data\PushNotificationData;
 use App\Jobs\DeliverWebPush;
 use App\Models\Account\PushSubscription;
 use App\Services\Account\PushNotificationService;
@@ -58,7 +59,7 @@ class WebPushDeliveryTest extends TestCase
     {
         Queue::fake();
         $sub = $this->subscription();
-        app(PushNotificationService::class)->sendToUsers([$sub->user_id, $sub->user_id], ['kind' => 'message']);
+        app(PushNotificationService::class)->sendToUsers([$sub->user_id, $sub->user_id], PushNotificationData::fromArray(['title' => 'Test', 'body' => 'Body', 'url' => '/', 'tag' => 'test', 'kind' => 'message']));
         Queue::assertPushed(DeliverWebPush::class, fn (DeliverWebPush $job) => $job->subscriptionId === $sub->id
             && $job->queue === 'background' && $job->connection === 'database' && $job->afterCommit === true);
         Queue::assertPushed(DeliverWebPush::class, 1);
@@ -67,7 +68,7 @@ class WebPushDeliveryTest extends TestCase
     public function test_expired_subscription_is_deleted(): void
     {
         $sub = $this->subscription();
-        $this->sender(410)->deliver($sub->id, []);
+        $this->sender(410)->deliver($sub->id, PushNotificationData::fromArray(['title' => 'Test', 'body' => 'Body', 'url' => '/', 'tag' => 'test']));
         $this->assertDatabaseMissing('push_subscriptions', ['id' => $sub->id]);
     }
 
@@ -75,7 +76,7 @@ class WebPushDeliveryTest extends TestCase
     {
         $sub = $this->subscription();
         $this->expectException(RuntimeException::class);
-        $this->sender(503)->deliver($sub->id, []);
+        $this->sender(503)->deliver($sub->id, PushNotificationData::fromArray(['title' => 'Test', 'body' => 'Body', 'url' => '/', 'tag' => 'test']));
     }
 
     public function test_unsafe_legacy_subscription_is_removed_before_transport(): void
@@ -84,14 +85,14 @@ class WebPushDeliveryTest extends TestCase
         $sub->update(['endpoint' => 'https://127.0.0.1/push']);
         $sender = $this->mock(PushNotificationService::class)->makePartial()->shouldAllowMockingProtectedMethods();
         $sender->shouldNotReceive('sendNotification');
-        $sender->deliver($sub->id, []);
+        $sender->deliver($sub->id, PushNotificationData::fromArray(['title' => 'Test', 'body' => 'Body', 'url' => '/', 'tag' => 'test']));
         $this->assertDatabaseMissing('push_subscriptions', ['id' => $sub->id]);
     }
 
     public function test_old_call_notification_is_not_delivered(): void
     {
         $sub = $this->subscription();
-        $job = new DeliverWebPush($sub->id, ['kind' => 'call']);
+        $job = new DeliverWebPush($sub->id, PushNotificationData::fromArray(['title' => 'Test', 'body' => 'Body', 'url' => '/', 'tag' => 'test', 'kind' => 'call']));
         $this->travel(61)->seconds();
         $sender = $this->mock(PushNotificationService::class);
         $sender->shouldNotReceive('deliver');

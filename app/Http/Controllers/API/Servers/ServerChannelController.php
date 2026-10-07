@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\API\Servers;
 
+use App\Data\CreateServerChannelData;
+use App\Data\UpdateServerChannelData;
 use App\Enums\ServerChannelKind;
 use App\Enums\ServerPermission;
 use App\Http\Controllers\Controller;
@@ -68,7 +70,7 @@ class ServerChannelController extends Controller
     {
         $this->authorize('manageChannels', $server);
 
-        $channel = $this->channels->create($server, $request->validated());
+        $channel = $this->channels->create($server, CreateServerChannelData::fromArray($request->validated()));
         $this->audit->record($server, $request->user(), 'channel.create', 'channel', $channel->id, $channel->name, [
             'kind' => ['new' => $channel->kind->value],
         ]);
@@ -88,7 +90,7 @@ class ServerChannelController extends Controller
 
         $before = $serverChannel->only(['name', 'topic', 'category_id']);
         $overwritesBefore = $this->permissionOverwritesSnapshot($serverChannel);
-        $updated = $this->channels->update($serverChannel, $this->roles->actorFor($server, $request->user()), $request->validated());
+        $updated = $this->channels->update($serverChannel, $this->roles->actorFor($server, $request->user()), UpdateServerChannelData::fromArray($request->validated()));
 
         $changes = collect($updated->only(array_keys($before)))
             ->filter(fn ($value, $key) => $value != $before[$key])

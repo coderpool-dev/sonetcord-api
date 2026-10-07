@@ -2,10 +2,14 @@
 
 namespace App\Services\Account;
 
+use App\Data\LoginData;
+use App\Data\LoginResult;
+use App\Data\RegisterData;
+use App\Data\ResetPasswordData;
+use App\Data\SessionContext;
 use App\Exceptions\ApiException;
 use App\Models\User;
 use App\Notifications\PasswordResetLinkNotification;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 
@@ -19,19 +23,17 @@ class AuthService
 
     /**
      * Новый аккаунт не подтверждён: письмо со ссылкой уходит сразу.
-     *
-     * @param  array{name: string, email: string, login: string, password: string, date?: string|null}  $data
      */
-    public function register(array $data): User
+    public function register(RegisterData $data): User
     {
         $this->emailDelivery->ensureAvailable('Регистрация временно недоступна: отправка писем подтверждения не настроена');
 
         $user = User::create([
-            'name' => $data['name'],
-            'email' => $data['email'],
-            'login' => $data['login'],
-            'password' => Hash::make($data['password']),
-            'date' => $data['date'] ?? now(),
+            'name' => $data->name,
+            'email' => $data->email,
+            'login' => $data->login,
+            'password' => Hash::make($data->password),
+            'date' => $data->date ?? now(),
             'email_verified_at' => null,
         ]);
 
@@ -42,14 +44,12 @@ class AuthService
 
     /**
      * Неподтверждённой почте вход не даём, но заново отправляем ссылку подтверждения.
-     *
-     * @return array{user: User, token: string}
      */
-    public function login(string $email, string $password, Request $request): array
+    public function login(LoginData $data, SessionContext $context): LoginResult
     {
-        $user = User::firstWhere('email', $email);
+        $user = User::firstWhere('email', $data->email);
 
-        if (! $user || ! Hash::check($password, $user->password)) {
+        if (! $user || ! Hash::check($data->password, $user->password)) {
             throw new ApiException('Неверный пароль или Пользователь не найден', 401);
         }
 
@@ -62,7 +62,7 @@ class AuthService
             ]);
         }
 
-        return ['user' => $user, 'token' => $this->sessions->issueToken($user, $request)];
+        return new LoginResult($user, $this->sessions->issueToken($user, $context));
     }
 
     /** Подпись ссылки проверяет middleware signed, здесь — что ссылка выдана на этот адрес. */
@@ -108,12 +108,15 @@ class AuthService
 
     /**
      * После смены пароля выходим на всех устройствах.
-     *
-     * @param  array{email: string, token: string, password: string, password_confirmation?: string}  $credentials
      */
-    public function resetPassword(array $credentials): bool
+    public function resetPassword(ResetPasswordData $credentials): bool
     {
-        $status = Password::broker()->reset($credentials, function (User $user, string $password) {
+        $status = Password::broker()->reset([
+            'email' => $credentials->email,
+            'token' => $credentials->token,
+            'password' => $credentials->password,
+            'password_confirmation' => $credentials->passwordConfirmation,
+        ], function (User $user, string $password) {
             $user->forceFill(['password' => Hash::make($password)])->save();
             $user->tokens()->delete();
         });

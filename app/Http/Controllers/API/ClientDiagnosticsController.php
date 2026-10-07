@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API;
 
+use App\Data\ClientDiagnosticsBatch;
 use App\Http\Controllers\Controller;
 use App\Services\ClientDiagnosticsService;
 use Illuminate\Http\Request;
@@ -42,7 +43,7 @@ class ClientDiagnosticsController extends Controller
             'events.*.data.cancelled' => ['sometimes', 'boolean'],
             'events.*.data.audio_enabled' => ['sometimes', 'boolean'],
         ]);
-        $diagnostics->store($request->user(), $data, $request->userAgent() ?? '');
+        $diagnostics->store($request->user(), ClientDiagnosticsBatch::fromArray($data), $request->userAgent() ?? '');
 
         return response()->noContent();
     }

@@ -6,7 +6,7 @@ namespace App\Data;
 final readonly class CallStart
 {
     public function __construct(
-        public array $call,
+        public CallData $call,
         // false — в канале уже шёл звонок, пользователь просто подключается к нему.
         public bool $created,
     ) {}

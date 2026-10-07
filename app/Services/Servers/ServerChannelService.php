@@ -2,6 +2,9 @@
 
 namespace App\Services\Servers;
 
+use App\Data\CreateServerChannelData;
+use App\Data\PermissionOverwriteData;
+use App\Data\UpdateServerChannelData;
 use App\Enums\ServerChannelKind;
 use App\Enums\ServerPermission;
 use App\Models\Servers\Server;
@@ -54,34 +57,32 @@ class ServerChannelService
             ->values();
     }
 
-    public function create(Server $server, array $validated): ServerChannel
+    public function create(Server $server, CreateServerChannelData $validated): ServerChannel
     {
-        $kind = ServerChannelKind::from((int) $validated['kind']);
+        $kind = ServerChannelKind::from((int) $validated->kind);
 
-        if ($kind === ServerChannelKind::Category) {
-            $validated['category_id'] = null;
-        }
+        $categoryId = $kind === ServerChannelKind::Category ? null : $validated->categoryId;
 
-        if (! empty($validated['category_id'])) {
-            $this->assertCategoryInServer((int) $validated['category_id'], (int) $server->id);
+        if (! empty($categoryId)) {
+            $this->assertCategoryInServer((int) $categoryId, (int) $server->id);
         }
 
         $position = (int) ServerChannel::query()->where('server_id', $server->id)->max('position') + 1;
 
         return ServerChannel::create([
             'server_id' => $server->id,
-            'category_id' => $validated['category_id'] ?? null,
-            'name' => trim($validated['name']),
+            'category_id' => $categoryId ?? null,
+            'name' => trim($validated->name),
             'kind' => $kind,
-            'topic' => $validated['topic'] ?? null,
+            'topic' => $validated->topic ?? null,
             'position' => $position,
         ]);
     }
 
-    public function update(ServerChannel $channel, ServerActor $actor, array $validated): ServerChannel
+    public function update(ServerChannel $channel, ServerActor $actor, UpdateServerChannelData $validated): ServerChannel
     {
-        if (array_key_exists('name', $validated) && $validated['name'] !== null) {
-            $name = trim($validated['name']);
+        if ($validated->has('name') && $validated->name !== null) {
+            $name = trim($validated->name);
 
             if ($name === '') {
                 throw ValidationException::withMessages(['name' => ['Введите название канала']]);
@@ -90,14 +91,14 @@ class ServerChannelService
             $channel->name = $name;
         }
 
-        if (array_key_exists('topic', $validated)) {
-            $channel->topic = $validated['topic'];
+        if ($validated->has('topic')) {
+            $channel->topic = $validated->topic;
         }
 
-        if (! empty($validated['category_id']) && $channel->kind !== ServerChannelKind::Category) {
-            $this->assertCategoryInServer((int) $validated['category_id'], (int) $channel->server_id);
-            $channel->category_id = $validated['category_id'];
-        } elseif (array_key_exists('category_id', $validated) && $validated['category_id'] === null) {
+        if (! empty($validated->categoryId) && $channel->kind !== ServerChannelKind::Category) {
+            $this->assertCategoryInServer((int) $validated->categoryId, (int) $channel->server_id);
+            $channel->category_id = $validated->categoryId;
+        } elseif ($validated->has('category_id') && $validated->categoryId === null) {
             // Явный null — вынести канал из категории.
             $channel->category_id = null;
         }
@@ -105,12 +106,12 @@ class ServerChannelService
         DB::transaction(function () use ($channel, $actor, $validated) {
             $channel->save();
 
-            if (array_key_exists('overwrites', $validated)) {
-                $this->syncRoleOverwrites($channel, $actor, $validated['overwrites'] ?? []);
+            if ($validated->has('overwrites')) {
+                $this->syncRoleOverwrites($channel, $actor, $validated->overwrites ?? []);
             }
 
-            if (array_key_exists('member_overwrites', $validated)) {
-                $this->syncMemberOverwrites($channel, $actor, $validated['member_overwrites'] ?? []);
+            if ($validated->has('member_overwrites')) {
+                $this->syncMemberOverwrites($channel, $actor, $validated->memberOverwrites ?? []);
             }
         });
 
@@ -143,7 +144,7 @@ class ServerChannelService
      * не менялись, не проверяются — иначе модератор не смог бы сохранить канал, где уже
      * настроена роль выше него.
      *
-     * @param  array<int, array{role_id: int, allow?: int, deny?: int}>  $overwrites
+     * @param  list<PermissionOverwriteData>  $overwrites
      */
     private function syncRoleOverwrites(ServerChannel $channel, ServerActor $actor, array $overwrites): void
     {
@@ -155,7 +156,7 @@ class ServerChannelService
 
         $new = collect();
         foreach ($overwrites as $overwrite) {
-            $roleId = (int) $overwrite['role_id'];
+            $roleId = (int) $overwrite->targetId;
             if (! $roles->has($roleId)) {
                 continue;
             }
@@ -188,7 +189,7 @@ class ServerChannelService
     /**
      * Полная замена переопределений для отдельных участников — применяются последними.
      *
-     * @param  array<int, array{member_id: int, allow?: int, deny?: int}>  $overwrites
+     * @param  list<PermissionOverwriteData>  $overwrites
      */
     private function syncMemberOverwrites(ServerChannel $channel, ServerActor $actor, array $overwrites): void
     {
@@ -204,7 +205,7 @@ class ServerChannelService
 
         $new = collect();
         foreach ($overwrites as $overwrite) {
-            $memberId = (int) $overwrite['member_id'];
+            $memberId = (int) $overwrite->targetId;
             if (! $memberIds->contains($memberId)) {
                 continue;
             }
@@ -230,10 +231,10 @@ class ServerChannelService
     }
 
     /** @return array{0: int, 1: int} [allow, deny] только из переопределяемых на канале битов */
-    private function normalizeOverwrite(array $overwrite): array
+    private function normalizeOverwrite(PermissionOverwriteData $overwrite): array
     {
-        $allow = ((int) ($overwrite['allow'] ?? 0)) & ServerPermission::CHANNEL_OVERRIDABLE;
-        $deny = ((int) ($overwrite['deny'] ?? 0)) & ServerPermission::CHANNEL_OVERRIDABLE & ~$allow;
+        $allow = $overwrite->allow & ServerPermission::CHANNEL_OVERRIDABLE;
+        $deny = $overwrite->deny & ServerPermission::CHANNEL_OVERRIDABLE & ~$allow;
 
         return [$allow, $deny];
     }

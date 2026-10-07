@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API\Support;
 
+use App\Data\UserReportData;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Reports\StoreReportRequest;
 use App\Services\Presence\GeoIpService;
@@ -19,9 +20,7 @@ class ReportController extends Controller
     {
         $this->reports->submit(
             $request->user(),
-            (int) $request->validated('target_id'),
-            $request->validated('reason'),
-            $request->validated('comment'),
+            UserReportData::fromArray($request->validated()),
             $this->geoIp->resolveClientIp($request),
         );
 

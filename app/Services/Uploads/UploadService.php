@@ -2,6 +2,7 @@
 
 namespace App\Services\Uploads;
 
+use App\Data\UploadFileData;
 use App\Exceptions\ApiException;
 use App\Exceptions\UploadException;
 use App\Models\Conversations\Channel;
@@ -35,23 +36,23 @@ class UploadService
         private readonly MessageService $messages,
     ) {}
 
-    public function start(User $user, int $channelId, string $filename, ?string $mime, int $size): UploadSession
+    public function start(User $user, int $channelId, UploadFileData $file): UploadSession
     {
         $maxBytes = (int) config('uploads.max_bytes');
-        if ($size > $maxBytes) {
+        if ($file->size > $maxBytes) {
             throw UploadException::tooLarge($maxBytes);
         }
 
-        return DB::transaction(function () use ($user, $channelId, $filename, $mime, $size) {
+        return DB::transaction(function () use ($user, $channelId, $file) {
             User::whereKey($user->id)->lockForUpdate()->firstOrFail();
-            $this->attachments->assertQuota((int) $user->id, $size);
-            $this->attachments->ensureFreeSpace($size);
+            $this->attachments->assertQuota((int) $user->id, $file->size);
+            $this->attachments->ensureFreeSpace($file->size);
             $upload = new UploadSession([
                 'user_id' => $user->id,
                 'channel_id' => $channelId,
-                'filename' => $filename,
-                'mime' => $mime ?: 'application/octet-stream',
-                'total_size' => $size,
+                'filename' => $file->filename,
+                'mime' => $file->mime ?: 'application/octet-stream',
+                'total_size' => $file->size,
                 'received_size' => 0,
             ]);
             $upload->id = $upload->newUniqueId();

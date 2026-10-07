@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Data\ClientDiagnosticsBatch;
+use App\Data\ClientLogFilters;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
@@ -18,9 +20,9 @@ class ClientDiagnosticsService
         'livekit_track_published', 'livekit_subscription_error', 'microphone_error', 'camera_error', 'screen_error',
     ];
 
-    public function store(User $user, array $batch, string $agent): void
+    public function store(User $user, ClientDiagnosticsBatch $batch, string $agent): void
     {
-        $key = 'client_diagnostics:'.$user->id.':'.$batch['batch_id'];
+        $key = 'client_diagnostics:'.$user->id.':'.$batch->batchId;
         if (! Cache::add($key, true, 86400)) {
             return;
         }
@@ -33,7 +35,8 @@ class ClientDiagnosticsService
             $browserName = match ($browser[1] ?? '') {
                 'Edg' => 'Edge', 'OPR' => 'Opera', 'Firefox' => 'Firefox', 'Chrome' => 'Chrome', 'Version' => 'Safari', default => 'Other',
             };
-            foreach ($batch['events'] as $event) {
+            foreach ($batch->events as $entry) {
+                $event = $entry->toArray();
                 $event['page'] = $this->safePath($event['page']);
                 if (isset($event['data']['endpoint'])) {
                     $event['data']['endpoint'] = $this->safePath($event['data']['endpoint']);
@@ -41,8 +44,8 @@ class ClientDiagnosticsService
                 $logger->info('client_event', [
                     'schema' => 1, 'received_at' => now()->toIso8601String(),
                     'user_id' => $user->id, 'login' => $user->login,
-                    'session_id' => $batch['session_id'], 'batch_id' => $batch['batch_id'],
-                    'platform' => $batch['platform'], 'build' => $batch['build'],
+                    'session_id' => $batch->sessionId, 'batch_id' => $batch->batchId,
+                    'platform' => $batch->platform, 'build' => $batch->build,
                     'browser' => $browserName, 'browser_version' => $browser[2] ?? '',
                     ...$event,
                 ]);
@@ -53,9 +56,9 @@ class ClientDiagnosticsService
         }
     }
 
-    public function recent(array $filters): array
+    public function recent(ClientLogFilters $filters): array
     {
-        $start = CarbonImmutable::parse($filters['date'] ?? now('Europe/Moscow')->toDateString(), 'Europe/Moscow')->startOfDay();
+        $start = CarbonImmutable::parse($filters->date ?? now('Europe/Moscow')->toDateString(), 'Europe/Moscow')->startOfDay();
         $end = $start->addDay();
         $files = array_unique([$start->utc()->toDateString(), $end->subSecond()->utc()->toDateString()]);
         $entries = [];
@@ -86,8 +89,8 @@ class ClientDiagnosticsService
                     if ($stamp < $start->timestamp || $stamp >= $end->timestamp) {
                         continue;
                     }
-                    foreach (['user_id', 'session_id', 'level', 'event'] as $key) {
-                        if (isset($filters[$key]) && (string) $filters[$key] !== (string) ($event[$key] ?? '')) {
+                    foreach (['user_id' => $filters->userId, 'session_id' => $filters->sessionId, 'level' => $filters->level, 'event' => $filters->event] as $key => $value) {
+                        if ($value !== null && (string) $value !== (string) ($event[$key] ?? '')) {
                             continue 2;
                         }
                     }

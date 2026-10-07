@@ -2,6 +2,8 @@
 
 namespace App\Services\Account;
 
+use App\Data\ProfileUpdateResult;
+use App\Data\UpdateProfileData;
 use App\Events\UserProfileUpdated;
 use App\Models\User;
 use App\Services\Presence\ActivityService;
@@ -20,16 +22,12 @@ class ProfileService
 
     public function __construct(private readonly ActivityService $activityService) {}
 
-    /**
-     * @param  array<string, mixed>  $validated
-     * @return array{user: User, changed: bool}
-     */
     public function update(
         User $user,
-        array $validated,
+        UpdateProfileData $validated,
         ?UploadedFile $avatar = null,
         ?UploadedFile $banner = null,
-    ): array {
+    ): ProfileUpdateResult {
         $updateData = $this->attributesFromInput($user, $validated);
 
         if ($avatar !== null) {
@@ -38,17 +36,17 @@ class ProfileService
 
         if ($banner !== null) {
             $updateData['banner'] = $this->storeImage($banner, 'banners', $user->id.'.jpg', $user->banner);
-        } elseif ($validated['remove_banner'] ?? false) {
+        } elseif ($validated->removeBanner ?? false) {
             $this->deletePublicFile('banners', $user->banner);
             $updateData['banner'] = null;
         }
 
-        if ($validated['clear_game_status'] ?? false) {
+        if ($validated->clearGameStatus ?? false) {
             $this->activityService->recordGameEnd($user);
         }
 
         if ($updateData === []) {
-            return ['user' => $user->load('yandexMusicConnection'), 'changed' => false];
+            return new ProfileUpdateResult($user->load('yandexMusicConnection'), false);
         }
 
         $user->update($updateData);
@@ -62,58 +60,58 @@ class ProfileService
             broadcast(new UserProfileUpdated($user, $user->activeChannelIds()));
         }
 
-        return ['user' => $user, 'changed' => true];
+        return new ProfileUpdateResult($user, true);
     }
 
     /**
-     * @param  array<string, mixed>  $validated
      * @return array<string, mixed>
      */
-    private function attributesFromInput(User $user, array $validated): array
+    private function attributesFromInput(User $user, UpdateProfileData $validated): array
     {
         // null означает «поле не передано»: такие поля не трогаем.
         $updateData = array_filter(
-            array_intersect_key($validated, array_flip(['name', 'date', 'presence'])),
+            ['name' => $validated->name, 'date' => $validated->date, 'presence' => $validated->presence],
             fn ($value) => $value !== null,
         );
 
-        if (isset($validated['email'])) {
-            $updateData['email'] = $validated['email'];
+        if (isset($validated->email)) {
+            $updateData['email'] = $validated->email;
 
-            if (strcasecmp($validated['email'], $user->email) !== 0) {
+            if (strcasecmp($validated->email, $user->email) !== 0) {
                 $updateData['email_verified_at'] = null;
             }
         }
 
-        if (isset($validated['current_password'], $validated['new_password'])) {
-            if (! Hash::check($validated['current_password'], $user->password)) {
+        if (isset($validated->currentPassword, $validated->newPassword)) {
+            if (! Hash::check($validated->currentPassword, $user->password)) {
                 throw ValidationException::withMessages(['current_password' => ['Текущий пароль неверен']]);
             }
 
-            $updateData['password'] = Hash::make($validated['new_password']);
+            $updateData['password'] = Hash::make($validated->newPassword);
         }
 
-        if (array_key_exists('banner_color', $validated)) {
-            $updateData['banner_color'] = $validated['banner_color'] ?: null;
+        if ($validated->has('banner_color')) {
+            $updateData['banner_color'] = $validated->bannerColor ?: null;
         }
 
-        if ($validated['clear_status'] ?? false) {
+        if ($validated->clearStatus ?? false) {
             $updateData['status_emoji'] = null;
             $updateData['status_text'] = null;
         } else {
-            foreach (['status_emoji', 'status_text'] as $field) {
-                if (array_key_exists($field, $validated)) {
-                    $updateData[$field] = $validated[$field] ?: null;
-                }
+            if ($validated->has('status_emoji')) {
+                $updateData['status_emoji'] = $validated->statusEmoji ?: null;
+            }
+            if ($validated->has('status_text')) {
+                $updateData['status_text'] = $validated->statusText ?: null;
             }
         }
 
-        if ($validated['clear_game_status'] ?? false) {
+        if ($validated->clearGameStatus ?? false) {
             $updateData['game_status_text'] = null;
             $updateData['game_status_synced_at'] = null;
-        } elseif (array_key_exists('game_status_text', $validated)) {
-            $updateData['game_status_text'] = $validated['game_status_text'] ?: null;
-            $updateData['game_status_synced_at'] = $validated['game_status_text'] ? now() : null;
+        } elseif ($validated->has('game_status_text')) {
+            $updateData['game_status_text'] = $validated->gameStatusText ?: null;
+            $updateData['game_status_synced_at'] = $validated->gameStatusText ? now() : null;
         }
 
         return $updateData;

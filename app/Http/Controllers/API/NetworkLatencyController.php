@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\API;
 
+use App\Data\GeoLocationData;
+use App\Data\NetworkLatencySample;
 use App\Http\Controllers\Controller;
 use App\Services\NetworkLatencyService;
 use App\Services\Presence\GeoIpService;
@@ -24,7 +26,7 @@ class NetworkLatencyController extends Controller
         ]);
         // Location is resolved on the reporting request, never on the timed probe.
         $location = $geo->lookupIp($request->ip());
-        $service->record((int) $request->user()->id, $sample, $location);
+        $service->record((int) $request->user()->id, NetworkLatencySample::fromArray($sample), GeoLocationData::fromArray($location));
 
         return response()->noContent()->header('Cache-Control', 'no-store, private');
     }

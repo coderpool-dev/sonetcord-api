@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Data\PushNotificationData;
 use App\Services\Account\PushNotificationService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -16,9 +17,13 @@ class DeliverWebPush implements ShouldQueue
 
     public int $expiresAt;
 
-    public function __construct(public int $subscriptionId, public array $payload)
+    /** @var array<string, mixed> */
+    public array $payload;
+
+    public function __construct(public int $subscriptionId, PushNotificationData $payload)
     {
-        $this->expiresAt = now()->addSeconds(($payload['kind'] ?? '') === 'call' ? 60 : 3600)->timestamp;
+        $this->payload = $payload->toArray();
+        $this->expiresAt = now()->addSeconds(($payload->kind ?? '') === 'call' ? 60 : 3600)->timestamp;
         $connection = config('services.webpush.queue_connection') ?: config('queue.default');
         $this->onConnection(in_array($connection, ['sync', 'null'], true) ? 'database' : $connection);
         $this->onQueue('background');
@@ -33,7 +38,7 @@ class DeliverWebPush implements ShouldQueue
     public function handle(PushNotificationService $push): void
     {
         if (now()->timestamp < $this->expiresAt) {
-            $push->deliver($this->subscriptionId, $this->payload);
+            $push->deliver($this->subscriptionId, PushNotificationData::fromArray($this->payload));
         }
     }
 }

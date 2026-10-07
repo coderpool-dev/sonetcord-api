@@ -38,7 +38,7 @@ class CallController extends Controller
 
         return $this->successResponse(
             'Данные звонка успешно получены',
-            ['call' => $start->call],
+            ['call' => $start->call->toArray()],
             $start->created ? 201 : 200,
         );
     }

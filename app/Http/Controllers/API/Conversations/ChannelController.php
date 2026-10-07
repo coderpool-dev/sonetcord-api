@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API\Conversations;
 
+use App\Data\CreateChannelData;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Channels\StoreChannelRequest;
 use App\Http\Requests\Channels\UpdateChannelRequest;
@@ -28,11 +29,11 @@ class ChannelController extends Controller
 
     public function store(StoreChannelRequest $request): JsonResponse
     {
-        $creation = $this->channels->create($request->user(), $request->validated());
+        $creation = $this->channels->create($request->user(), CreateChannelData::fromArray($request->validated()));
 
         return $this->successResponse(
             $creation->created ? 'Канал успешно создан' : 'Личный чат уже существует, участники возвращены в чат',
-            $creation->payload,
+            $creation->toArray(),
             $creation->created ? 201 : 200,
         );
     }

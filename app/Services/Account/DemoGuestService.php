@@ -2,6 +2,8 @@
 
 namespace App\Services\Account;
 
+use App\Data\DemoLoginResult;
+use App\Data\SessionContext;
 use App\Enums\CallStatus;
 use App\Enums\ChannelType;
 use App\Enums\FriendStatus;
@@ -25,7 +27,6 @@ use App\Models\User;
 use App\Services\Conversations\AttachmentService;
 use App\Services\Conversations\CallScreenPreviewService;
 use App\Services\Conversations\EncryptionService;
-use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -79,8 +80,7 @@ class DemoGuestService
         private readonly CallScreenPreviewService $screenPreviews,
     ) {}
 
-    /** @return array{user: User, token: string, server_id: int, channel_id: int} */
-    public function start(Request $request): array
+    public function start(SessionContext $context): DemoLoginResult
     {
         $personas = $this->ensurePersonas();
         // Первый пинг «я в сети» от гостя придёт не сразу, а список участников он увидит сразу.
@@ -96,12 +96,7 @@ class DemoGuestService
             return [$guest, $server, $general];
         });
 
-        return [
-            'user' => $guest,
-            'token' => $this->sessions->issueToken($guest, $request),
-            'server_id' => (int) $server->id,
-            'channel_id' => (int) $general->id,
-        ];
+        return new DemoLoginResult($guest, $this->sessions->issueToken($guest, $context), (int) $server->id, (int) $general->id);
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API\Servers;
 
+use App\Data\CreateServerInviteData;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Servers\StoreServerInviteRequest;
 use App\Http\Resources\ServerInviteResource;
@@ -34,7 +35,7 @@ class ServerInviteController extends Controller
     {
         $this->authorize('createInvite', $server);
 
-        $invite = $this->invites->create($server, $request->user(), $request->validated());
+        $invite = $this->invites->create($server, $request->user(), CreateServerInviteData::fromArray($request->validated()));
         $this->audit->record($server, $request->user(), 'invite.create', 'invite', $invite->id, $invite->code, array_filter([
             'max_uses' => $invite->max_uses ? ['new' => $invite->max_uses] : null,
             'expires_at' => $invite->expires_at ? ['new' => $invite->expires_at->toIso8601String()] : null,

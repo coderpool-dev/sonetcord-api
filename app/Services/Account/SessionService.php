@@ -2,12 +2,12 @@
 
 namespace App\Services\Account;
 
+use App\Data\SessionContext;
 use App\Exceptions\ApiException;
 use App\Models\Account\PersonalAccessToken;
 use App\Models\User;
 use App\Services\Presence\GeoIpService;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 /** Сессии пользователя — его токены Sanctum, по одному на устройство. */
@@ -27,17 +27,17 @@ class SessionService
      *
      * @return string токен в формате Sanctum: «id|секрет»
      */
-    public function issueToken(User $user, Request $request): string
+    public function issueToken(User $user, SessionContext $context): string
     {
-        $userAgent = $request->userAgent();
-        $location = $this->geoIp->locationFromRequest($request);
+        $userAgent = $context->userAgent;
+        $location = $this->geoIp->lookupIp($context->ip);
         $secret = Str::random(40);
 
         $token = $user->tokens()->create([
             'name' => $this->deviceParser->describe($userAgent)['device'],
             'token' => hash('sha256', $secret),
             'abilities' => ['*'],
-            'ip_address' => $this->geoIp->resolveClientIp($request),
+            'ip_address' => $context->ip,
             'country' => $location['country'],
             'city' => $location['city'],
             'user_agent' => $userAgent,
@@ -66,9 +66,9 @@ class SessionService
     }
 
     /** Обновляет IP, страну и браузер у сессии, с которой пришёл запрос. */
-    public function refreshLocation(PersonalAccessToken $token, Request $request): void
+    public function refreshLocation(PersonalAccessToken $token, SessionContext $context): void
     {
-        $ip = $this->geoIp->resolveClientIp($request);
+        $ip = $context->ip;
 
         if ($this->geoIp->isLocalIp($ip)) {
             return;
@@ -79,7 +79,7 @@ class SessionService
             || $token->ip_address !== $ip;
 
         $location = $needsLookup
-            ? $this->geoIp->locationFromRequest($request)
+            ? $this->geoIp->lookupIp($context->ip)
             : ['country' => $token->country, 'city' => $token->city];
 
         // save() сам ничего не пишет, если значения не изменились.
@@ -87,7 +87,7 @@ class SessionService
             'ip_address' => $ip,
             'country' => $location['country'],
             'city' => $location['city'] ?? $token->city,
-            'user_agent' => $request->userAgent() ?: $token->user_agent,
+            'user_agent' => $context->userAgent ?: $token->user_agent,
         ])->save();
     }
 

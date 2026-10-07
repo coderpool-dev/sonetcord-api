@@ -2,7 +2,9 @@
 
 namespace App\Services\Conversations;
 
+use App\Data\CallData;
 use App\Data\CallStart;
+use App\Data\PushNotificationData;
 use App\Enums\CallLeaveOutcome;
 use App\Enums\CallStatus;
 use App\Enums\ChannelType;
@@ -78,7 +80,7 @@ class CallService
 
         $recipients = $this->otherMembers($channel->id, (int) $user->id);
         $silentUserIds = $this->doNotDisturbIds($recipients);
-        $payload = [...$this->callPayload($call, $user), 'silent_user_ids' => $silentUserIds];
+        $payload = [...$this->callPayload($call, $user)->toArray(), 'silent_user_ids' => $silentUserIds];
 
         $this->messages->postStartMessage($call, $user);
         broadcast(new CallCreated($payload));
@@ -86,7 +88,7 @@ class CallService
         $ringing = $this->ring($user, $recipients, $silentUserIds, $payload);
         $this->pushIncomingCall($user, $call, $ringing, $silentUserIds);
 
-        return new CallStart($payload, created: true);
+        return new CallStart(CallData::fromArray($payload), created: true);
     }
 
     /** @return Collection<int, ChannelMember> */
@@ -150,7 +152,7 @@ class CallService
     {
         $avatar = User::getAvatarUrl($caller->avatar, $caller->updated_at?->toISOString());
 
-        $this->push->sendToUsers($ringing, [
+        $this->push->sendToUsers($ringing, PushNotificationData::fromArray([
             'title' => 'Входящий звонок',
             'body' => ((string) ($caller->name ?? $caller->login)).' звонит вам',
             'url' => "/channels/{$call->channel_id}",
@@ -163,7 +165,7 @@ class CallService
             'initiator_login' => $caller->login ?? $caller->email,
             'initiator_avatar' => $avatar,
             'silent_user_ids' => $silentUserIds,
-        ]);
+        ]));
     }
 
     /**
@@ -492,15 +494,15 @@ class CallService
             ->update(['call_status' => $callStatus]);
     }
 
-    private function callPayload(Call $call, User $user): array
+    private function callPayload(Call $call, User $user): CallData
     {
-        return [
+        return CallData::fromArray([
             'call_id' => $call->call_id,
             'channel_id' => $call->channel_id,
             'initiator_id' => $call->initiator_id,
             'initiator_login' => $user->login ?? $user->email,
             'status' => $call->status->value,
             'type' => 'voice',
-        ];
+        ]);
     }
 }

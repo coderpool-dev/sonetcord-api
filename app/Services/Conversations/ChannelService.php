@@ -3,6 +3,8 @@
 namespace App\Services\Conversations;
 
 use App\Data\ChannelCreation;
+use App\Data\ChannelCreator;
+use App\Data\CreateChannelData;
 use App\Enums\ChannelType;
 use App\Enums\MembershipStatus;
 use App\Exceptions\ApiException;
@@ -30,9 +32,9 @@ class ChannelService
         'last_online', 'updated_at',
     ];
 
-    public function create(User $user, array $validated): ChannelCreation
+    public function create(User $user, CreateChannelData $validated): ChannelCreation
     {
-        $recipientIds = array_map('intval', $validated['recipients']);
+        $recipientIds = array_map('intval', $validated->recipients);
 
         foreach ($recipientIds as $recipientId) {
             if (! $user->isFriend($recipientId)) {
@@ -347,7 +349,7 @@ class ChannelService
             ->all();
     }
 
-    private function createPrivateChannel(User $user, int $recipientId, array $validated): ChannelCreation
+    private function createPrivateChannel(User $user, int $recipientId, CreateChannelData $validated): ChannelCreation
     {
         if ($recipientId === (int) $user->id) {
             throw new ApiException('Нельзя создать личный чат с самим собой', 400);
@@ -359,11 +361,7 @@ class ChannelService
             $this->rejoinPrivateChannel($existingChannel->id, (int) $user->id, $recipientId);
             $existingChannel->refresh()->load(['members.user' => fn ($query) => $query->select(self::MEMBER_USER_COLUMNS)]);
 
-            return new ChannelCreation([
-                'channel' => $existingChannel,
-                'existing' => true,
-                'rejoined' => true,
-            ], created: false);
+            return new ChannelCreation($existingChannel, created: false, rejoined: true);
         }
 
         return DB::transaction(function () use ($user, $recipientId, $validated) {
@@ -373,19 +371,13 @@ class ChannelService
                 $recipientId => MembershipStatus::Admin,
             ]);
 
-            return new ChannelCreation([
-                'channel' => $channel,
-                'creator' => $this->creatorPayload($user),
-                'recipients' => [$recipientId],
-                'channel_members' => $members,
-                'count' => 2,
-                'is_private' => true,
-            ], created: true);
+            return new ChannelCreation($channel, created: true, creator: $this->creatorPayload($user),
+                recipients: [$recipientId], members: $members, count: 2, isPrivate: true);
         });
     }
 
     /** @param  list<int>  $recipientIds */
-    private function createGroupChannel(User $user, array $recipientIds, array $validated): ChannelCreation
+    private function createGroupChannel(User $user, array $recipientIds, CreateChannelData $validated): ChannelCreation
     {
         return DB::transaction(function () use ($user, $recipientIds, $validated) {
             $memberStatuses = [$user->id => MembershipStatus::Admin]
@@ -395,14 +387,8 @@ class ChannelService
 
             Message::createSystem($channel->id, $user->id, 'channel_created', ['actor_name' => $user->name], "{$user->name} создал(а) беседу");
 
-            return new ChannelCreation([
-                'channel' => $channel,
-                'creator' => $this->creatorPayload($user),
-                'recipients' => array_keys($memberStatuses),
-                'channel_members' => $members,
-                'count' => count($memberStatuses),
-                'is_private' => false,
-            ], created: true);
+            return new ChannelCreation($channel, created: true, creator: $this->creatorPayload($user),
+                recipients: array_keys($memberStatuses), members: $members, count: count($memberStatuses), isPrivate: false);
         });
     }
 
@@ -410,12 +396,12 @@ class ChannelService
      * @param  array<int, MembershipStatus>  $memberStatuses  id пользователя => статус участника
      * @return array{0: Channel, 1: list<ChannelMember>}
      */
-    private function createChannel(ChannelType $type, array $validated, array $memberStatuses): array
+    private function createChannel(ChannelType $type, CreateChannelData $validated, array $memberStatuses): array
     {
         $channel = Channel::create([
-            'name' => $validated['name'] ?? '',
+            'name' => $validated->name ?? '',
             'status' => $type,
-            'avatar' => $validated['avatar'] ?? null,
+            'avatar' => $validated->avatar ?? null,
         ]);
 
         $members = [];
@@ -431,9 +417,9 @@ class ChannelService
         return [$channel, $members];
     }
 
-    private function creatorPayload(User $user): array
+    private function creatorPayload(User $user): ChannelCreator
     {
-        return ['id' => $user->id, 'name' => $user->name, 'status' => MembershipStatus::Admin];
+        return new ChannelCreator((int) $user->id, $user->name, MembershipStatus::Admin);
     }
 
     private function findPrivateChannel(int $firstUserId, int $secondUserId): ?Channel

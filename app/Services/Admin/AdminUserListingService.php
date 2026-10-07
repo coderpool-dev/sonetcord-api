@@ -52,6 +52,8 @@ class AdminUserListingService
                 'users.login',
                 'users.name',
                 'users.avatar',
+                'users.banner',
+                'users.banner_color',
                 'users.updated_at',
                 'users.presence',
                 'users.game_status_text',
@@ -140,6 +142,8 @@ class AdminUserListingService
             'login' => (string) $user->login,
             'name' => (string) $user->name,
             'avatar' => User::getAvatarUrl($user->avatar, $user->updated_at?->toISOString()),
+            'banner' => User::getBannerUrl($user->banner, $user->updated_at?->toISOString()),
+            'banner_color' => $user->banner_color,
             'presence' => $user->presence ?? 'online',
             // Аксессор сам скроет статус, если клиент не подтверждал его дольше TTL.
             'game_status_text' => $user->game_status_text,

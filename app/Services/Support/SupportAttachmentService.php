@@ -2,6 +2,7 @@
 
 namespace App\Services\Support;
 
+use App\Data\SupportAttachmentData;
 use App\Models\Support\SupportMessage;
 use App\Models\User;
 use App\Services\Uploads\ImageCompressor;
@@ -21,7 +22,7 @@ class SupportAttachmentService
 
     public function __construct(private readonly ImageCompressor $images) {}
 
-    public function store(UploadedFile $file, int $threadId): array
+    public function store(UploadedFile $file, int $threadId): SupportAttachmentData
     {
         if (($file->getSize() ?: 0) > self::MAX_BYTES) {
             throw ValidationException::withMessages(['file' => ['Скриншот слишком большой (макс. 12 МБ)']]);
@@ -62,7 +63,7 @@ class SupportAttachmentService
         $diskPath = sprintf('support/%d/%s.%s', $threadId, Str::uuid()->toString(), $extension);
         Storage::disk(self::DISK)->put($diskPath, $binary);
 
-        return [
+        return SupportAttachmentData::fromArray([
             'disk_path' => $diskPath,
             'mime' => $mime,
             'name' => $name,
@@ -70,7 +71,7 @@ class SupportAttachmentService
             'size' => strlen($binary),
             'width' => $width,
             'height' => $height,
-        ];
+        ]);
     }
 
     /** Скриншот из обращения видят автор обращения и администраторы. */

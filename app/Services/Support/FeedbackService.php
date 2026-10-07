@@ -2,6 +2,8 @@
 
 namespace App\Services\Support;
 
+use App\Data\AdminListFilters;
+use App\Data\FeedbackData;
 use App\Models\Support\FeedbackMessage;
 use App\Models\User;
 use App\Support\LikePattern;
@@ -12,13 +14,13 @@ class FeedbackService
     private const ADMIN_LIST_LIMIT = 200;
 
     /** Отправить форму может и гость, тогда автор — null. */
-    public function submit(array $form, ?User $author, string $ip, string $country, ?string $userAgent): FeedbackMessage
+    public function submit(FeedbackData $form, ?User $author, string $ip, string $country, ?string $userAgent): FeedbackMessage
     {
         return FeedbackMessage::query()->create([
-            'name' => trim($form['name']),
-            'email' => mb_strtolower(trim($form['email'])),
-            'body' => trim($form['body']),
-            'page' => $form['page'] ?? null,
+            'name' => trim($form->name),
+            'email' => mb_strtolower(trim($form->email)),
+            'body' => trim($form->body),
+            'page' => $form->page ?? null,
             'status' => FeedbackMessage::STATUS_NEW,
             'user_id' => $author?->id,
             'ip' => $ip,
@@ -27,18 +29,17 @@ class FeedbackService
         ]);
     }
 
-    /** @param array{status?: string, q?: string} $filters */
-    public function listForAdmin(array $filters): array
+    public function listForAdmin(AdminListFilters $filters): array
     {
         $messages = FeedbackMessage::query()
             ->with('user')
             ->when(
-                $filters['status'] ?? null,
+                $filters->status ?? null,
                 fn ($query, string $status) => $query->where('status', $status),
                 // Без фильтра показываем всё, кроме архива.
                 fn ($query) => $query->whereIn('status', [FeedbackMessage::STATUS_NEW, FeedbackMessage::STATUS_READ]),
             )
-            ->when($filters['q'] ?? null, function ($query, string $search) {
+            ->when($filters->q ?? null, function ($query, string $search) {
                 $pattern = LikePattern::contains($search);
 
                 $query->where(fn ($query) => $query

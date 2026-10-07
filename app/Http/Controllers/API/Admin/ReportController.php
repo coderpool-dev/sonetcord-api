@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API\Admin;
 
+use App\Data\AdminListFilters;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ListReportsRequest;
 use App\Http\Requests\Admin\UpdateReportStatusRequest;
@@ -15,7 +16,7 @@ class ReportController extends Controller
 
     public function index(ListReportsRequest $request): JsonResponse
     {
-        return $this->successResponse('Жалобы на пользователей', $this->reports->listForAdmin($request->validated()));
+        return $this->successResponse('Жалобы на пользователей', $this->reports->listForAdmin(AdminListFilters::fromArray($request->validated())));
     }
 
     public function update(UpdateReportStatusRequest $request, UserReport $report): JsonResponse

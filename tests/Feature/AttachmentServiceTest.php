@@ -25,10 +25,10 @@ class AttachmentServiceTest extends TestCase
 
         $stored = app(AttachmentService::class)->finalizeFromTemp($tmpPath, $user->id, $channel->id, 'party.gif', 'image/gif');
 
-        $this->assertSame('image', $stored['kind']);
-        $this->assertSame([40, 30], [$stored['width'], $stored['height']]);
-        $this->assertTrue($stored['encrypted']);
+        $this->assertSame('image', $stored->kind);
+        $this->assertSame([40, 30], [$stored->width, $stored->height]);
+        $this->assertTrue($stored->encrypted);
         $this->assertFileDoesNotExist($tmpPath);
-        Storage::disk('local')->assertExists($stored['disk_path']);
+        Storage::disk('local')->assertExists($stored->diskPath);
     }
 }

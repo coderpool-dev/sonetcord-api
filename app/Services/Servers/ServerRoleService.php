@@ -2,6 +2,8 @@
 
 namespace App\Services\Servers;
 
+use App\Data\CreateServerRoleData;
+use App\Data\UpdateServerRoleData;
 use App\Enums\ServerPermission;
 use App\Exceptions\ApiException;
 use App\Models\Servers\Server;
@@ -51,9 +53,9 @@ class ServerRoleService
     }
 
     /** Новая роль встаёт в самый низ, над @everyone (как в Discord), — не выше того, кто её создал. */
-    public function create(Server $server, ServerActor $actor, array $validated): ServerRole
+    public function create(Server $server, ServerActor $actor, CreateServerRoleData $validated): ServerRole
     {
-        $permissions = $this->sanitizeMask($validated['permissions'] ?? 0);
+        $permissions = $this->sanitizeMask($validated->permissions ?? 0);
         $this->assertCanGrant($actor, $permissions);
 
         return DB::transaction(function () use ($server, $validated, $permissions) {
@@ -64,23 +66,23 @@ class ServerRoleService
 
             return ServerRole::create([
                 'server_id' => $server->id,
-                'name' => trim($validated['name']),
-                'color' => $validated['color'] ?? '#99aab5',
+                'name' => trim($validated->name),
+                'color' => $validated->color ?? '#99aab5',
                 'permissions' => $permissions,
                 'position' => 1,
                 'is_default' => false,
-                'hoist' => (bool) ($validated['hoist'] ?? false),
-                'mentionable' => (bool) ($validated['mentionable'] ?? false),
+                'hoist' => (bool) ($validated->hoist ?? false),
+                'mentionable' => (bool) ($validated->mentionable ?? false),
             ]);
         });
     }
 
-    public function update(ServerRole $role, ServerActor $actor, array $validated): ServerRole
+    public function update(ServerRole $role, ServerActor $actor, UpdateServerRoleData $validated): ServerRole
     {
         $this->assertCanManageRole($actor, $role);
 
-        if (array_key_exists('name', $validated) && $validated['name'] !== null && ! $role->is_default) {
-            $name = trim($validated['name']);
+        if ($validated->has('name') && $validated->name !== null && ! $role->is_default) {
+            $name = trim($validated->name);
 
             if ($name === '') {
                 throw ValidationException::withMessages(['name' => ['Введите название роли']]);
@@ -89,20 +91,20 @@ class ServerRoleService
             $role->name = $name;
         }
 
-        if (array_key_exists('color', $validated) && $validated['color'] !== null) {
-            $role->color = $validated['color'];
+        if ($validated->has('color') && $validated->color !== null) {
+            $role->color = $validated->color;
         }
 
-        if (array_key_exists('hoist', $validated) && $validated['hoist'] !== null && ! $role->is_default) {
-            $role->hoist = (bool) $validated['hoist'];
+        if ($validated->has('hoist') && $validated->hoist !== null && ! $role->is_default) {
+            $role->hoist = (bool) $validated->hoist;
         }
 
-        if (array_key_exists('mentionable', $validated) && $validated['mentionable'] !== null && ! $role->is_default) {
-            $role->mentionable = (bool) $validated['mentionable'];
+        if ($validated->has('mentionable') && $validated->mentionable !== null && ! $role->is_default) {
+            $role->mentionable = (bool) $validated->mentionable;
         }
 
-        if (array_key_exists('permissions', $validated)) {
-            $permissions = $this->sanitizeMask((int) $validated['permissions']);
+        if ($validated->has('permissions')) {
+            $permissions = $this->sanitizeMask((int) $validated->permissions);
             // Проверяем только то, что реально меняется: чужие права, уже стоящие на роли,
             // не мешают поправить ей цвет или снять/добавить то, что есть у тебя.
             $this->assertCanGrant($actor, $permissions ^ $role->permissions);

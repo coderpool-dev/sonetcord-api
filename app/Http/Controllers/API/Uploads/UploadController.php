@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API\Uploads;
 
+use App\Data\UploadFileData;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Uploads\CompleteUploadRequest;
 use App\Http\Requests\Uploads\InitUploadRequest;
@@ -24,9 +25,7 @@ class UploadController extends Controller
         $upload = $this->uploads->start(
             $request->user(),
             (int) $channel->id,
-            $request->string('filename')->toString(),
-            $request->input('mime'),
-            $request->integer('size'),
+            UploadFileData::fromArray($request->validated()),
         );
 
         return $this->successResponse('Загрузка начата', [

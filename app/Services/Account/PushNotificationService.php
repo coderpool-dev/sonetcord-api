@@ -2,6 +2,7 @@
 
 namespace App\Services\Account;
 
+use App\Data\PushNotificationData;
 use App\Jobs\DeliverWebPush;
 use App\Models\Account\PushSubscription;
 use App\Services\Http\PublicHttpDestination;
@@ -58,9 +59,8 @@ class PushNotificationService
 
     /**
      * @param  int[]  $userIds
-     * @param  array{title: string, body: string, url: string, tag: string, icon?: string|null, kind?: string}  $payload
      */
-    public function sendToUsers(array $userIds, array $payload): void
+    public function sendToUsers(array $userIds, PushNotificationData $payload): void
     {
         $userIds = array_values(array_unique(array_map('intval', $userIds)));
         if ($userIds === [] || ! $this->isConfigured()) {
@@ -104,7 +104,7 @@ class PushNotificationService
         return "push:desktop-app:{$userId}";
     }
 
-    public function deliver(int $subscriptionId, array $payload): void
+    public function deliver(int $subscriptionId, PushNotificationData $payload): void
     {
         $subscription = PushSubscription::query()->find($subscriptionId);
         if (! $subscription || ! $this->isConfigured()) {
@@ -121,7 +121,7 @@ class PushNotificationService
         }
 
         $options = app(PublicHttpDestination::class)->curlOptions($subscription->endpoint);
-        $report = $this->sendNotification($subscription, $payload, $options);
+        $report = $this->sendNotification($subscription, $payload->toArray(), $options);
         if ($report->isSubscriptionExpired()) {
             $subscription->delete();
         } elseif (! $report->isSuccess()) {

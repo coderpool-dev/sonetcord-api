@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API\Account;
 
+use App\Data\SessionContext;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SessionResource;
 use App\Models\Account\PersonalAccessToken;
@@ -19,7 +20,7 @@ class SessionController extends Controller
         $currentToken = $this->sessions->currentToken($user);
 
         if ($currentToken) {
-            $this->sessions->refreshLocation($currentToken, $request);
+            $this->sessions->refreshLocation($currentToken, SessionContext::fromRequest($request));
         }
 
         $currentTokenId = $currentToken ? (int) $currentToken->getKey() : null;

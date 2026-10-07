@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API\Account;
 
+use App\Data\UpdateProfileData;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Profile\UpdateProfileRequest;
 use App\Http\Resources\UserResource;
@@ -26,14 +27,14 @@ class ProfileController extends Controller
     {
         $update = $this->profiles->update(
             $request->user(),
-            $request->validated(),
+            UpdateProfileData::fromArray($request->validated()),
             $request->file('avatar'),
             $request->file('banner'),
         );
 
         return $this->successResponse(
-            $update['changed'] ? 'Профиль успешно обновлен' : 'Нет данных для обновления',
-            ['user' => new UserResource($update['user'])],
+            $update->changed ? 'Профиль успешно обновлен' : 'Нет данных для обновления',
+            ['user' => new UserResource($update->user)],
         );
     }
 }

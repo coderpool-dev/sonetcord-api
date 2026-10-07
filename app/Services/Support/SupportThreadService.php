@@ -2,6 +2,8 @@
 
 namespace App\Services\Support;
 
+use App\Data\PushNotificationData;
+use App\Data\SupportThreadFilters;
 use App\Events\SupportReplyPosted;
 use App\Http\Resources\SupportMessageResource;
 use App\Models\Support\SupportMessage;
@@ -55,19 +57,18 @@ class SupportThreadService
     }
 
     /**
-     * @param  array{category?: string|null, unread?: string|null, sort?: string|null, order?: string|null}  $filters
      * @return Collection<int, SupportThread>
      */
-    public function listThreadsForAdmin(array $filters = []): Collection
+    public function listThreadsForAdmin(SupportThreadFilters $filters = new SupportThreadFilters): Collection
     {
-        $sort = in_array($filters['sort'] ?? null, ['last_message_at', 'created_at', 'id'], true)
-            ? $filters['sort']
+        $sort = in_array($filters->sort ?? null, ['last_message_at', 'created_at', 'id'], true)
+            ? $filters->sort
             : 'last_message_at';
-        $order = ($filters['order'] ?? null) === 'asc' ? 'asc' : 'desc';
-        $unread = $filters['unread'] ?? null;
+        $order = ($filters->order ?? null) === 'asc' ? 'asc' : 'desc';
+        $unread = $filters->unread ?? null;
 
         return SupportThread::query()
-            ->where('category', $filters['category'] ?? SupportThread::CATEGORY_INBOX)
+            ->where('category', $filters->category ?? SupportThread::CATEGORY_INBOX)
             ->with([self::AUTHOR, 'latestMessage.'.self::AUTHOR])
             ->withExists(['messages as unread' => $this->unreadByStaffConstraint()])
             ->when(in_array($unread, ['1', 'true'], true), fn (Builder $query) => $query->whereHas('messages', $this->unreadByStaffConstraint()))
@@ -148,7 +149,7 @@ class SupportThreadService
             'body' => $body,
             'attachment' => $files === []
                 ? null
-                : ['items' => array_map(fn (UploadedFile $file) => $this->attachments->store($file, (int) $thread->id), $files)],
+                : ['items' => array_map(fn (UploadedFile $file) => $this->attachments->store($file, (int) $thread->id)->toArray(), $files)],
         ]);
 
         // Новое сообщение переоткрывает закрытое обращение, а своё сообщение автор уже прочитал.
@@ -176,13 +177,13 @@ class SupportThreadService
         ));
 
         $preview = mb_strimwidth(trim($message->body), 0, 140, '…');
-        $this->push->sendToUsers([$userId], [
+        $this->push->sendToUsers([$userId], PushNotificationData::fromArray([
             'title' => 'Поддержка SonetCord',
             'body' => $preview !== '' ? $preview : 'Прислали изображение',
             'url' => '/support',
             'tag' => 'support',
             'kind' => 'support',
-        ]);
+        ]));
     }
 
     private function normalizeBody(?string $body, bool $hasFiles): string

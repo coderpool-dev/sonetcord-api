@@ -2,6 +2,7 @@
 
 namespace App\Services\Conversations;
 
+use App\Data\AttachmentResult;
 use App\Data\StoredAttachment;
 use App\Events\MessageChanged;
 use App\Exceptions\ApiException;
@@ -42,7 +43,7 @@ class AttachmentService
     ) {}
 
     /** Файл из одного запроса (POST /messages/attachment): такие всегда под лимитом шифрования. */
-    public function store(UploadedFile $file, int $userId, int $channelId): array
+    public function store(UploadedFile $file, int $userId, int $channelId): AttachmentResult
     {
         return DB::transaction(function () use ($file, $userId, $channelId) {
             User::whereKey($userId)->lockForUpdate()->firstOrFail();
@@ -64,9 +65,9 @@ class AttachmentService
      * переносится как есть. При заданном destination исходник сохраняется до коммита
      * загрузки. message_id потом заполняет linkToMessage.
      *
-     * @return array meta вложения для Message::meta['attachment'] вместе с id строки attachments
+     * @return AttachmentResult Метаданные сохранённого вложения и ID записи
      */
-    public function finalizeFromTemp(string $tmpPath, int $userId, int $channelId, string $clientName, string $mime, ?string $destination = null): array
+    public function finalizeFromTemp(string $tmpPath, int $userId, int $channelId, string $clientName, string $mime, ?string $destination = null): AttachmentResult
     {
         $name = FileName::sanitize($clientName);
         $size = filesize($tmpPath) ?: 0;
@@ -229,7 +230,7 @@ class AttachmentService
     }
 
     /** Картинки (кроме GIF) пережимаются в WebP, остальное шифруется как есть. */
-    private function storeEncrypted(string $path, string $name, string $mime, int $userId, int $channelId, ?string $destination = null): array
+    private function storeEncrypted(string $path, string $name, string $mime, int $userId, int $channelId, ?string $destination = null): AttachmentResult
     {
         $binary = file_get_contents($path);
 
@@ -292,7 +293,7 @@ class AttachmentService
         ], $userId, $channelId);
     }
 
-    private function moveUnencrypted(string $tmpPath, int $size, string $name, string $mime, int $userId, int $channelId, ?string $destination = null): array
+    private function moveUnencrypted(string $tmpPath, int $size, string $name, string $mime, int $userId, int $channelId, ?string $destination = null): AttachmentResult
     {
         $diskPath = $destination ?? $this->buildPath($channelId, FileName::extension($name, $mime), encrypted: false);
         $finalPath = Storage::disk(self::DISK)->path($diskPath);
@@ -325,7 +326,7 @@ class AttachmentService
     }
 
     /** Строка учёта и meta вложения — та же форма, что лежит в Message::meta['attachment'], плюс id. */
-    private function createRecord(array $meta, int $userId, int $channelId): array
+    private function createRecord(array $meta, int $userId, int $channelId): AttachmentResult
     {
         $attachment = Attachment::create([
             ...$meta,
@@ -334,7 +335,7 @@ class AttachmentService
             'last_accessed_at' => now(),
         ]);
 
-        return [...$meta, 'id' => $attachment->id];
+        return AttachmentResult::fromArray([...$meta, 'id' => (int) $attachment->id]);
     }
 
     private function buildPath(int $channelId, string $extension, bool $encrypted): string

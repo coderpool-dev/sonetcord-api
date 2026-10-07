@@ -2,28 +2,30 @@
 
 namespace App\Services;
 
+use App\Data\GeoLocationData;
+use App\Data\NetworkLatencySample;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class NetworkLatencyService
 {
-    public function record(int $userId, array $sample, array $location): void
+    public function record(int $userId, NetworkLatencySample $sample, GeoLocationData $location): void
     {
-        $city = mb_substr(trim($location['city'] ?? '') ?: 'Не определён', 0, 160);
-        $country = $location['country_code'] ?? null;
+        $city = mb_substr(trim($location->city ?? '') ?: 'Не определён', 0, 160);
+        $country = $location->countryCode ?? null;
         $country = is_string($country) && preg_match('/^[A-Z]{2}$/', $country) ? $country : null;
-        $keys = ['user_id' => $userId, 'hour' => now()->startOfHour(), 'metric' => $sample['metric'],
+        $keys = ['user_id' => $userId, 'hour' => now()->startOfHour(), 'metric' => $sample->metric,
             'city_key' => hash('sha256', ($country ?? '').':'.mb_strtolower($city))];
-        $rtt = $sample['ok'] ? (int) round($sample['rtt_ms']) : null;
+        $rtt = $sample->ok ? (int) round($sample->rttMs) : null;
         DB::transaction(function () use ($keys, $city, $country, $sample, $rtt) {
             DB::table('network_latency_hours')->insertOrIgnore([...$keys, 'city' => $city,
-                'country_code' => $country, 'last_ok' => $sample['ok'], 'last_at' => now()]);
+                'country_code' => $country, 'last_ok' => $sample->ok, 'last_at' => now()]);
             DB::table('network_latency_hours')->where($keys)->update([
                 'rtt_sum' => DB::raw('rtt_sum + '.($rtt ?? 0)),
-                'successes' => DB::raw('successes + '.($sample['ok'] ? 1 : 0)),
-                'failures' => DB::raw('failures + '.($sample['ok'] ? 0 : 1)),
-                'last_rtt' => $rtt, 'last_ok' => $sample['ok'], 'last_at' => now(),
+                'successes' => DB::raw('successes + '.($sample->ok ? 1 : 0)),
+                'failures' => DB::raw('failures + '.($sample->ok ? 0 : 1)),
+                'last_rtt' => $rtt, 'last_ok' => $sample->ok, 'last_at' => now(),
             ]);
         });
         if (Cache::add('latency:prune', true, 3600)) {

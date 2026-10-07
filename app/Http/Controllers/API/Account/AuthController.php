@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers\API\Account;
 
+use App\Data\LoginData;
+use App\Data\RegisterData;
+use App\Data\ResetPasswordData;
+use App\Data\SessionContext;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\ForgotPasswordRequest;
 use App\Http\Requests\Auth\LoginRequest;
@@ -19,7 +23,7 @@ class AuthController extends Controller
 
     public function register(RegisterRequest $request): JsonResponse
     {
-        $user = $this->auth->register($request->validated());
+        $user = $this->auth->register(RegisterData::fromArray($request->validated()));
 
         return $this->successResponse('Пользователь успешно зарегистрирован. Проверьте почту и подтвердите аккаунт.', [
             'user' => new UserResource($user->load('yandexMusicConnection')),
@@ -29,15 +33,14 @@ class AuthController extends Controller
 
     public function login(LoginRequest $request): JsonResponse
     {
-        ['user' => $user, 'token' => $token] = $this->auth->login(
-            $request->validated('email'),
-            $request->validated('password'),
-            $request,
+        $result = $this->auth->login(
+            LoginData::fromArray($request->validated()),
+            SessionContext::fromRequest($request),
         );
 
         return $this->successResponse('Вход выполнен успешно', [
-            'user' => new UserResource($user->load('yandexMusicConnection')),
-            'token' => $token,
+            'user' => new UserResource($result->user->load('yandexMusicConnection')),
+            'token' => $result->token,
         ]);
     }
 
@@ -69,7 +72,7 @@ class AuthController extends Controller
 
     public function resetPassword(ResetPasswordRequest $request): JsonResponse
     {
-        if (! $this->auth->resetPassword($request->validated())) {
+        if (! $this->auth->resetPassword(ResetPasswordData::fromArray($request->validated()))) {
             return $this->errorResponse('Ссылка недействительна или устарела', 422);
         }
 

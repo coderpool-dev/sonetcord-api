@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API\Admin;
 
+use App\Data\ClientLogFilters;
 use App\Http\Controllers\Controller;
 use App\Services\ClientDiagnosticsService;
 use Illuminate\Http\JsonResponse;
@@ -19,7 +20,7 @@ class AdminClientLogsController extends Controller
             'event' => ['sometimes', Rule::in(ClientDiagnosticsService::EVENTS)],
         ]);
 
-        return $this->successResponse('Клиентские логи', $diagnostics->recent($filters))
+        return $this->successResponse('Клиентские логи', $diagnostics->recent(ClientLogFilters::fromArray($filters)))
             ->header('Cache-Control', 'no-store, private');
     }
 }

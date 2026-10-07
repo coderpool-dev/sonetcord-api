@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API\Admin;
 
+use App\Data\SupportThreadFilters;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ListSupportThreadsRequest;
 use App\Http\Requests\Admin\UpdateSupportThreadRequest;
@@ -19,7 +20,7 @@ class SupportThreadController extends Controller
 
     public function index(ListSupportThreadsRequest $request): JsonResponse
     {
-        $threads = $this->support->listThreadsForAdmin($request->validated());
+        $threads = $this->support->listThreadsForAdmin(SupportThreadFilters::fromArray($request->validated()));
 
         return $this->successResponse('Обращения', [
             'threads' => SupportThreadResource::collection($threads)->resolve($request),

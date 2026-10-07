@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Data\CreateChannelData;
 use App\Enums\FriendStatus;
 use App\Models\Conversations\Call;
 use App\Models\Conversations\Channel;
@@ -47,11 +48,11 @@ class DemoSeeder extends Seeder
             ]);
         }
 
-        $creation = $channels->create($first, [
+        $creation = $channels->create($first, CreateChannelData::fromArray([
             'name' => 'Демо-беседа',
             'recipients' => [$second->id, $third->id],
-        ]);
-        $channelId = (int) $creation->payload['channel']->id;
+        ]));
+        $channelId = (int) $creation->channel->id;
 
         // Вчерашнее сообщение — чтобы в чате был разделитель дат.
         $messages->storeText($second, $channelId, null, 'Привет! Это вчерашнее сообщение', null)

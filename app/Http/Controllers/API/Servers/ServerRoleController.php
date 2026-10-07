@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\API\Servers;
 
+use App\Data\CreateServerRoleData;
+use App\Data\UpdateServerRoleData;
 use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Servers\AssignMemberRolesRequest;
@@ -39,7 +41,7 @@ class ServerRoleController extends Controller
     {
         $this->authorize('manageRoles', $server);
 
-        $role = $this->roles->create($server, $this->roles->actorFor($server, $request->user()), $request->validated());
+        $role = $this->roles->create($server, $this->roles->actorFor($server, $request->user()), CreateServerRoleData::fromArray($request->validated()));
         $this->audit->record($server, $request->user(), 'role.create', 'role', $role->id, $role->name, [
             'permissions' => ['new' => $role->permissions],
         ]);
@@ -53,7 +55,7 @@ class ServerRoleController extends Controller
         $this->assertRoleBelongsToServer($server, $role);
 
         $before = $role->only(['name', 'color', 'permissions', 'hoist', 'mentionable']);
-        $updated = $this->roles->update($role, $this->roles->actorFor($server, $request->user()), $request->validated());
+        $updated = $this->roles->update($role, $this->roles->actorFor($server, $request->user()), UpdateServerRoleData::fromArray($request->validated()));
         $changes = collect($updated->only(array_keys($before)))
             ->filter(fn ($value, $key) => $value != $before[$key])
             ->map(fn ($value, $key) => ['old' => $before[$key], 'new' => $value])

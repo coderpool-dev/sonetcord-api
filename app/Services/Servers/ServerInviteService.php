@@ -2,6 +2,7 @@
 
 namespace App\Services\Servers;
 
+use App\Data\CreateServerInviteData;
 use App\Enums\ServerMembershipStatus;
 use App\Exceptions\ApiException;
 use App\Models\Servers\Server;
@@ -30,11 +31,11 @@ class ServerInviteService
             ->get();
     }
 
-    public function create(Server $server, User $creator, array $validated): ServerInvite
+    public function create(Server $server, User $creator, CreateServerInviteData $validated): ServerInvite
     {
-        if (! empty($validated['channel_id'])) {
+        if (! empty($validated->channelId)) {
             $exists = ServerChannel::query()
-                ->whereKey($validated['channel_id'])
+                ->whereKey($validated->channelId)
                 ->where('server_id', $server->id)
                 ->exists();
 
@@ -46,10 +47,10 @@ class ServerInviteService
         return ServerInvite::create([
             'code' => $this->generateUniqueCode(),
             'server_id' => $server->id,
-            'channel_id' => $validated['channel_id'] ?? null,
+            'channel_id' => $validated->channelId ?? null,
             'created_by' => $creator->id,
-            'max_uses' => $validated['max_uses'] ?? null,
-            'expires_at' => $validated['expires_at'] ?? null,
+            'max_uses' => $validated->maxUses ?? null,
+            'expires_at' => $validated->expiresAt ?? null,
         ]);
     }
 

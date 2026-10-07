@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API\Support;
 
+use App\Data\FeedbackData;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Feedback\StoreFeedbackRequest;
 use App\Services\Presence\GeoIpService;
@@ -18,7 +19,7 @@ class FeedbackController extends Controller
     public function store(StoreFeedbackRequest $request): JsonResponse
     {
         $this->feedback->submit(
-            $request->validated(),
+            FeedbackData::fromArray($request->validated()),
             // Форма публичная: автора определяем по токену, только если он передан.
             $request->user('sanctum'),
             $this->geoIp->resolveClientIp($request),

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API\Servers;
 
+use App\Data\CreateServerData;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Servers\StoreServerRequest;
 use App\Http\Requests\Servers\UpdateServerRequest;
@@ -42,7 +43,7 @@ class ServerController extends Controller
 
     public function store(StoreServerRequest $request): JsonResponse
     {
-        $server = $this->servers->create($request->user(), $request->validated());
+        $server = $this->servers->create($request->user(), CreateServerData::fromArray($request->validated()));
 
         return $this->successResponse('Сервер успешно создан', ['server' => new ServerResource($this->withUserAccess($server, $request->user()))], 201);
     }

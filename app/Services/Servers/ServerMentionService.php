@@ -2,6 +2,7 @@
 
 namespace App\Services\Servers;
 
+use App\Data\PushNotificationData;
 use App\Enums\ServerPermission;
 use App\Events\ServerMentioned;
 use App\Models\Conversations\Message;
@@ -113,14 +114,14 @@ class ServerMentionService
             ));
         }
 
-        $this->push->sendToUsers($this->withoutMuted($recipients, $server, $channel, $mentions['users']), [
+        $this->push->sendToUsers($this->withoutMuted($recipients, $server, $channel, $mentions['users']), PushNotificationData::fromArray([
             'title' => "{$authorName} в #{$channel->name}",
             'body' => $excerpt !== '' ? $excerpt : 'Вас упомянули',
             'url' => "/servers/{$server->id}/channels/{$channel->id}",
             'tag' => "mention-{$channel->id}",
             'icon' => $authorAvatar,
             'kind' => 'mention',
-        ]);
+        ]));
     }
 
     /**

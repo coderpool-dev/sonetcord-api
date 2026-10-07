@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Data\PushNotificationData;
 use App\Enums\ChannelType;
 use App\Enums\ServerChannelKind;
 use App\Models\Servers\ServerChannel;
@@ -28,9 +29,9 @@ class ServerUnreadAndMuteTest extends TestCase
         {
             public function __construct(private array &$sink) {}
 
-            public function sendToUsers(array $userIds, array $payload): void
+            public function sendToUsers(array $userIds, PushNotificationData $payload): void
             {
-                $this->sink[] = ['users' => array_values($userIds), 'payload' => $payload];
+                $this->sink[] = ['users' => array_values($userIds), 'payload' => $payload->toArray()];
             }
         });
     }

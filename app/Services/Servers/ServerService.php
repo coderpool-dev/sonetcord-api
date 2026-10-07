@@ -2,6 +2,7 @@
 
 namespace App\Services\Servers;
 
+use App\Data\CreateServerData;
 use App\Enums\ServerChannelKind;
 use App\Enums\ServerMembershipStatus;
 use App\Enums\ServerPermission;
@@ -26,16 +27,16 @@ use Illuminate\Validation\ValidationException;
  */
 class ServerService
 {
-    public function create(User $user, array $validated): Server
+    public function create(User $user, CreateServerData $validated): Server
     {
         return DB::transaction(function () use ($user, $validated) {
             $server = Server::create([
-                'name' => trim($validated['name']),
+                'name' => trim($validated->name),
                 'owner_id' => $user->id,
             ]);
 
-            if (! empty($validated['icon'])) {
-                $server->icon = $this->storeImage($validated['icon'], 'server-icons', 'server_'.$server->id);
+            if (! empty($validated->icon)) {
+                $server->icon = $this->storeImage($validated->icon, 'server-icons', 'server_'.$server->id);
                 $server->save();
             }
 

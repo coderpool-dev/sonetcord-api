@@ -2,6 +2,8 @@
 
 namespace App\Services\Support;
 
+use App\Data\AdminListFilters;
+use App\Data\UserReportData;
 use App\Exceptions\ApiException;
 use App\Models\Support\UserReport;
 use App\Models\User;
@@ -12,13 +14,13 @@ class UserReportService
 {
     private const ADMIN_LIST_LIMIT = 200;
 
-    public function submit(User $reporter, int $targetId, string $reason, ?string $comment, string $ip): void
+    public function submit(User $reporter, UserReportData $report, string $ip): void
     {
-        if ($targetId === (int) $reporter->id) {
+        if ($report->targetId === (int) $reporter->id) {
             throw new ApiException('Нельзя пожаловаться на себя', 422);
         }
 
-        if (! User::query()->whereKey($targetId)->exists()) {
+        if (! User::query()->whereKey($report->targetId)->exists()) {
             throw new ApiException('Пользователь не найден', 404);
         }
 
@@ -26,24 +28,23 @@ class UserReportService
         UserReport::query()->firstOrCreate(
             [
                 'reporter_id' => $reporter->id,
-                'target_id' => $targetId,
+                'target_id' => $report->targetId,
                 'status' => UserReport::STATUS_NEW,
             ],
             [
-                'reason' => $reason,
-                'comment' => $comment !== null ? trim($comment) : null,
+                'reason' => $report->reason,
+                'comment' => $report->comment !== null ? trim($report->comment) : null,
                 'ip' => $ip,
             ],
         );
     }
 
-    /** @param array{status?: string, q?: string} $filters */
-    public function listForAdmin(array $filters): array
+    public function listForAdmin(AdminListFilters $filters): array
     {
         $reports = UserReport::query()
             ->with(['reporter', 'target'])
-            ->where('status', ($filters['status'] ?? null) ?: UserReport::STATUS_NEW)
-            ->when($filters['q'] ?? null, function ($query, string $search) {
+            ->where('status', ($filters->status ?? null) ?: UserReport::STATUS_NEW)
+            ->when($filters->q ?? null, function ($query, string $search) {
                 $pattern = LikePattern::contains($search);
                 $matchesUser = fn ($user) => $user->where('login', 'like', $pattern)->orWhere('name', 'like', $pattern);
 

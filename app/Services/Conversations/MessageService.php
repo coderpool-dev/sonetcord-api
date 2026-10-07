@@ -2,6 +2,8 @@
 
 namespace App\Services\Conversations;
 
+use App\Data\AttachmentResult;
+use App\Data\PushNotificationData;
 use App\Enums\ChannelType;
 use App\Events\MessageChanged;
 use App\Events\MessageSent;
@@ -65,14 +67,14 @@ class MessageService
         $author = (string) ($user->name ?? $user->login);
         $preview = Str::limit($preview !== '' ? $preview : 'Сообщение', 140);
 
-        $this->push->sendToUsers($recipients, [
+        $this->push->sendToUsers($recipients, PushNotificationData::fromArray([
             'title' => $isGroup ? ($channel->name ?: 'Группа') : $author,
             'body' => $isGroup ? "{$author}: {$preview}" : $preview,
             'url' => "/channels/{$channelId}",
             'tag' => "dm-{$channelId}",
             'icon' => User::getAvatarUrl($user->avatar, $user->updated_at?->toISOString()),
             'kind' => 'message',
-        ]);
+        ]));
     }
 
     /**
@@ -148,7 +150,7 @@ class MessageService
         User $user,
         ?int $channelId,
         ?int $serverChannelId,
-        array $stored,
+        AttachmentResult $stored,
         string $caption = '',
         ?int $replyToId = null,
     ): Message {
@@ -246,7 +248,7 @@ class MessageService
         User $user,
         ?int $channelId,
         ?int $serverChannelId,
-        array $stored,
+        AttachmentResult $stored,
         string $caption,
         ?int $replyToId,
     ): Message {
@@ -259,15 +261,15 @@ class MessageService
             'user_id' => $user->id,
             ...$this->targetColumn($channelId, $serverChannelId),
             'reply_to_id' => $replyToId,
-            'type' => $stored['kind'] === 'image' ? 'image' : 'file',
+            'type' => $stored->kind === 'image' ? 'image' : 'file',
             'message' => $caption !== '' ? $this->encryption->encrypt($caption, $keyId)['data'] : '',
-            'meta' => ['attachment' => $stored],
+            'meta' => ['attachment' => $stored->toArray()],
             'mentions' => $mentions,
             'key_id' => $keyId,
         ]);
 
-        if (! empty($stored['id'])) {
-            $this->attachments->linkToMessage((int) $stored['id'], (int) $message->id);
+        if (! empty($stored->id)) {
+            $this->attachments->linkToMessage((int) $stored->id, (int) $message->id);
         }
 
         DB::afterCommit(function () use ($user, $caption, $channelId, $serverChannelId, $message, $serverChannel, $mentions) {
