@@ -19,4 +19,9 @@ return new class extends Migration
             $table->foreign('initiator_id')->references('id')->on('users');
         });
     }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('calls');
+    }
 };
