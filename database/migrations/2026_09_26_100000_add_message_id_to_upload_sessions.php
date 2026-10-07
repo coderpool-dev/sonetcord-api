@@ -17,6 +17,9 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('upload_sessions', fn (Blueprint $table) => $table->dropColumn('message_id'));
+        Schema::table('upload_sessions', function (Blueprint $table) {
+            $table->dropIndex(['message_id']);
+            $table->dropColumn('message_id');
+        });
     }
 };

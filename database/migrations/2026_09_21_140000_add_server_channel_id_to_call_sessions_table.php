@@ -30,6 +30,7 @@ return new class extends Migration
     {
         Schema::table('call_sessions', function (Blueprint $table) {
             $table->dropForeign(['server_channel_id']);
+            $table->dropIndex(['server_channel_id']);
             $table->dropColumn('server_channel_id');
         });
 
